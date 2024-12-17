@@ -9,7 +9,9 @@ output:
 
 ```{r Packages, message=FALSE, warning=FALSE}
 # remotes::install_github("Rekyt/rtaxref")
-# install.packages(c("rgbif",""worrms"))
+# remotes::install_github(c("ropensci/taxize","ropensci/bold"))
+# install.packages(c("rgbif","worrms"))
+
 library(tidyverse)
 library(devtools)
 library(rtaxref)
@@ -17,7 +19,7 @@ library(worrms)
 library(taxize)
 library(purrr)
 library(data.table)
-# library(rgbif)
+library(rgbif)
 ```
 
 Tip: `rgbif::occ_download` can also be used but very time consuming.
@@ -218,7 +220,7 @@ filtered_data <- filtered_data %>%
 
 ## Island and archipelagos
 ```{r}
-shp_file_path <- file.path("..", "Data", "shp_pf")
+shp_file_path <- file.path("..", "Data/Other", "shp_pf")
 ```
 
 ```{r}
@@ -348,8 +350,12 @@ filtered_data <- filtered_data %>%
     isBrackish = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isBrackish),
     isFreshwater = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isFreshwater),
     isMarine = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isMarine),
-    isTerrestrial = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), 1, isTerrestrial)
+    isTerrestrial = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), 1, isTerrestrial),
+    species = if_else(scientificName == "Oliva annulata (Gmelin, 1791)", "Oliva annulata", species),
+    species = if_else(scientificName == "Phos varicosus Gould, 1849", "Phos varicosus", species)
   )
+
+#write.csv2(filtered_data, file = "05_Filtered_data.csv", row.names = FALSE)
 ```
 
 

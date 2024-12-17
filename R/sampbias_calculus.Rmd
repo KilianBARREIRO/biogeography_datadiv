@@ -21,11 +21,11 @@ library(sf)
 ```
 
 ```{r}
-atolls <- read.csv2("C:/Users/Kilian/Desktop/Biogeography Kilian/old/atolls.csv")
+atolls <- read.csv2("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/atolls.csv")
 ```
 
 ```{r}
-shp <- sf::st_read("C:/Users/Kilian/Documents/GitHub/Biogeography_datadiv/Data/shp_pf/") %>% #Not on Github for the moment, its in the GEOGRAPHIE_DES_ATOLLS file in the Biogeography Kilian
+shp <- sf::st_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_pf/") %>% #Not on Github for the moment, its in the GEOGRAPHIE_DES_ATOLLS file in the Biogeography Kilian
   sf::st_transform(crs = 4326) %>% 
   sf::st_make_valid()  %>% 
   dplyr::mutate(ILE = ifelse(OBJECTID %in% c(24733, 24734), "MOTU ONE (MAR)", ILE)) %>% #The shapefile does not distinct Motu One from Society and Marquesas archipelagos.
@@ -35,7 +35,7 @@ shp <- sf::st_read("C:/Users/Kilian/Documents/GitHub/Biogeography_datadiv/Data/s
 
 
 ```{r}
-filtered_data <- read.csv("C:/Users/Kilian/Documents/GitHub/Biogeography_datadiv/Data/05_Filtered_data.csv")
+filtered_data <- read.csv("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/05_Filtered_data.csv")
 
 subset_marine <- filtered_data %>% dplyr::filter(habitat == "Marine") %>%
   dplyr::select(decimalLongitude, decimalLatitude, species) %>%
@@ -46,10 +46,10 @@ subset_terrestrial <- filtered_data %>% dplyr::filter(habitat == "Terrestrial") 
   na.omit()
 
 
-shp_pf_path_rivers <- "C:/Users/Kilian/Desktop/Biogeography Kilian/old/SHAPEFILE_cities_PF/Rivers"
-shp_pf_path_roads <- "C:/Users/Kilian/Desktop/Biogeography Kilian/old/SHAPEFILE_cities_PF/Roads"
-shp_pf_path_cities <- "C:/Users/Kilian/Desktop/Biogeography Kilian/old/SHAPEFILE_cities_PF/Cities"
-shp_pf_path_airports <- "C:/Users/Kilian/Desktop/Biogeography Kilian/old/SHAPEFILE_cities_PF/Airports"
+shp_pf_path_rivers <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Rivers"
+shp_pf_path_roads <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Roads"
+shp_pf_path_cities <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Cities"
+shp_pf_path_airports <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Airports"
 
 
 shp_pf_rivers <- terra::vect(shp_pf_path_rivers) 
@@ -78,7 +78,7 @@ sampling_bias_marine <- sampbias::calculate_bias(subset_marine,
 
 summary_marine <- summary(sampling_bias_marine)
 plot_marine <- plot(sampling_bias_marine)
-# ggsave(plot_marine, file = "C:/Users/Kilian/Documents/Sampbias/sampbias_marine.jpeg", dpi = 300, height = 6, width = 8)
+ggsave(plot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg", dpi = 1000, height = 10, width = 8)
 #
 project_marine <- sampbias::project_bias(sampling_bias_marine)
 map_marine_bias <- sampbias::map_bias(project_marine)
@@ -88,11 +88,11 @@ map_marine_bias <- sampbias::map_bias(project_marine)
 # MARINE 
 ## BOXPLOT
 ```{r}
-variables_boxplot <- c("roads", "cities", "ports_airports", "rivers")
-colors <- viridis::viridis(length(variables))
+variables_boxplot <- c("rivers", "cities", "ports_airports", "roads")
+colors <- viridis::viridis(length(variables_boxplot))
 names(colors) <- variables_boxplot
 
-samp_marine_boxplot_data <- sampling_bias_marine_bias_estimate %>% 
+samp_marine_boxplot_data <- sampling_bias_marine$bias_estimate %>% 
   rename(rivers = w_waterbodies,
          cities = w_cities,
          ports_airports = w_airports,
@@ -102,18 +102,146 @@ samp_marine_boxplot_data <- sampling_bias_marine_bias_estimate %>%
   mutate(variable = factor(variable, levels = c( "rivers","cities", "ports_airports", "roads")))
   
 
-boxplot_marine <- ggplot(samp_marine_boxplot_data, aes(x = value, y = variable, color = variable)) +
+boxplot_marine <- ggplot(samp_marine_boxplot_data, aes(x = value, y = variable, color = variable, fill = variable)) +
   geom_boxplot() +
   scale_color_manual(values = colors) +
-  labs(title = "Marine", y = "Biasing factor", x = "Posterior weight") + 
-  theme_minimal() +
+  labs(y = "Biasing factor", x = "Posterior weight") + 
+  theme_bw() +
   xlim(c(0, 0.07)) +  
-  theme(legend.position = "none") +
-  scale_y_discrete(labels = c("Waterbodies","Cities","Ports \n Airports", "Roads")) 
+  scale_y_discrete(labels = c("Waterbodies", "Cities", "Ports \n Airports", "Roads")) +
+  theme(
+    legend.position = "none",          # Taille du titre
+    axis.title.x = element_text(size = 12),        # Taille du titre de l'axe X
+    axis.title.y = element_text(size = 12),        # Taille du titre de l'axe Y
+    axis.text.x = element_text(size = 10),         # Taille des étiquettes de l'axe X
+    axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
+  )
+
+ggsave(boxplot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
 ```
+
+
+```{r}
+```
+
+# TERRESTRIAL 
+## SAMPBIAS CALCULUS
+```{r}
+sampling_bias_terrestrial <- sampbias::calculate_bias(subset_terrestrial, 
+                                                      gaz = red_gaz, 
+                                                      res = 0.05, 
+                                                      terrestrial = FALSE,
+                                                      inp_raster = input_raster)
+
+sum_ter <- summary(sampling_bias_terrestrial)
+plot_terrestrial <- plot(sampling_bias_terrestrial)
+ggsave(plot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg", dpi = 1000, height = 10, width = 8)
+
+
+project_terrestrial <- sampbias::project_bias(sampling_bias_terrestrial)
+map_terrestrial_bias <- sampbias::map_bias(project_terrestrial)
+
+```
+
+# TERRESTRIAL
+## BOXPLOT
+```{r}
+samp_terrestrial_boxplot_data <- sampling_bias_terrestrial$bias_estimate %>% 
+  rename(rivers = w_waterbodies,
+         cities = w_cities,
+         ports_airports = w_airports,
+         roads = w_roads) %>% 
+  dplyr::select(c(6, 8, 7, 5)) %>% 
+  tidyr::gather(key = "variable", value = "value") %>%
+  mutate(variable = factor(variable, levels = c( "rivers","cities", "ports_airports", "roads")))
+  
+boxplot_terrestrial <- ggplot(samp_terrestrial_boxplot_data, aes(x = value, y = variable, color = variable)) +
+  geom_boxplot() +
+  scale_color_manual(values = colors) +
+  labs(y = "Biasing factor", x = "Posterior weight") + 
+  theme_bw() +
+  xlim(c(0, 0.07)) +  
+  scale_y_discrete(labels = c("Waterbodies", "Cities", "Ports \n Airports", "Roads")) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14),          # Taille du titre
+    axis.title.x = element_text(size = 12),        # Taille du titre de l'axe X
+    axis.title.y = element_text(size = 12),        # Taille du titre de l'axe Y
+    axis.text.x = element_text(size = 10),         # Taille des étiquettes de l'axe X
+    axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
+  )
+
+ggsave(boxplot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
+```
+
+
+```{r}
+library(magick)
+
+# Charger les images
+image1 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg")
+image2 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg")
+image3 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg")
+image4 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg")
+
+height <- 5000
+image3_width <- image_info(image3)$width
+image4_width <- image_info(image4)$width
+
+# Calculer le facteur de redimensionnement
+resize_factor3 <- height / image_info(image3)$height
+resize_factor4 <- height / image_info(image4)$height
+
+# Redimensionner en maintenant les proportions
+image3 <- image_resize(image3, paste0(image3_width * resize_factor3, "x", height))
+image4 <- image_resize(image4, paste0(image4_width * resize_factor4, "x", height))
+
+# Combiner les images par lignes
+row1 <- image_append(c(image1, image3)) %>% image_annotate("(a)", size = 350, color = "black", location = "+50+50") 
+row2 <- image_append(c(image2, image4)) %>% image_annotate("(b)", size = 350, color = "black", location = "+50+0")
+
+# Combiner les lignes en un carré 2x2
+combined_image <- image_append(c(row1, row2), stack = TRUE)
+
+image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.pdf",format = "pdf", density = 300)
+
+image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.jpeg", quality = 100)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## REAL DISTANCES POISSON MODEL FITTING
 ```{r}
+
 samp_marine_distances_data <- cbind(dist_marine_df, occ_marine_df) %>% 
   dplyr::filter(
                 cities != 0,
@@ -178,53 +306,8 @@ marine_dist_occ <- ggplot() +
   guides(color = guide_legend(title = "Poisson Models", ncol = 1))
 
 
-```
 
 
-# TERRESTRIAL 
-## SAMPBIAS CALCULUS
-```{r}
-sampling_bias_terrestrial <- sampbias::calculate_bias(subset_terrestrial, 
-                                                      gaz = red_gaz, 
-                                                      res = 0.05, 
-                                                      terrestrial = FALSE,
-                                                      inp_raster = input_raster)
-
-sum_ter <- summary(sampling_bias_terrestrial)
-plot_terrestrial <- plot(sampling_bias_terrestrial)
-
-project_terrestrial <- sampbias::project_bias(sampling_bias_terrestrial)
-map_terrestrial_bias <- sampbias::map_bias(project_terrestrial)
-
-```
-
-# TERRESTRIAL
-## BOXPLOT
-```{r}
-variables_boxplot <- c("roads", "cities", "ports_airports", "rivers")
-colors <- viridis::viridis(length(variables))
-names(colors) <- variables_boxplot
-
-samp_terrestrial_boxplot_data <- sampling_bias_terrestrial_bias_estimate %>% 
-  rename(rivers = w_waterbodies,
-         cities = w_cities,
-         ports_airports = w_airports,
-         roads = w_roads) %>% 
-  dplyr::select(c(6, 8, 7, 5)) %>% 
-  tidyr::gather(key = "variable", value = "value") %>%
-  mutate(variable = factor(variable, levels = c( "rivers","cities", "ports_airports", "roads")))
-  
-boxplot_terrestrial <- ggplot(samp_terrestrial_boxplot_data, aes(x = value, y = variable, color = variable)) +
-  geom_boxplot() +
-  scale_color_manual(values = colors) +
-  labs(title = "Terrestrial", y = "Bias factor", x = "Posterior weight") + 
-  theme_minimal() +
-  xlim(c(0, 0.07)) +
-  scale_y_discrete(labels = c("Waterbodies","Cities","Ports \n Airports", "Roads")) 
-```
-
-## REAL DISTANCES POISSON MODEL FITTING
-```{r}
 samp_terrestrial_distances_data <- cbind(dist_terrestrial_df, occ_terrestrial_df) %>% 
   dplyr::filter(
     # cities != 0,
@@ -457,8 +540,8 @@ print(terrestrial_expected_plot)
 ```{r}
 p1 <- boxplot_marine + ylab(NULL)
 p2 <- boxplot_terrestrial + ylab(NULL)
-p3 <- marine_expected_plot 
-p4 <- terrestrial_expected_plot + ylab(NULL)
+p3 <- plot_marine 
+p4 <- plot_terrestrial + ylab(NULL)
 
 # arrange the three plots in a single row
 prow <- cowplot::plot_grid(

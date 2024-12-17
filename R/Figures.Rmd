@@ -66,22 +66,31 @@ nodes$group <- as.factor(c("a", "b", "c","d", "e", "f", "g", "h", "i", "j", "k",
 links$group <- as.factor(c("a1", "b1", "c1","d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1","m1"))
 
 # Give a color for each group:
-my_color <- 'd3.scaleOrdinal() .domain(["a", "b", "c","d", "e", "f", "g", "h", "i", "j", "k", "l","m","n","a1", "b1", "c1","d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1","m1"]) .range(["darkbrown", "#7D6608", "#9A7D0A", "#B7950B", "#D4AC0D", "#F1C40F", "#7D6608","#9A7D0A","#B7950B", "#D4AC0D", "#F4D03F", "#F7DC6F", "#F9E79F", "#FCF3CF", "#2471A3","#2471A3","#2980B9","#2980B9","#5499C7","#5499C7","#7FB3D5","#7FB3D5","#A9CCE3","#A9CCE3","#D4E6F1","#D4E6F1","#D4E6F1"])'
+my_color <- 'd3.scaleOrdinal() .domain(["a", "b", "c","d", "e", "f", "g", "h", "i", "j", "k", "l","m","n","a1", "b1", "c1","d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1","m1"]) .range(["#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7",
+"#D4E6F1", "#F39C12", "#A9CCE3", "#F39C12", "#7FB3D5", "#F39C12", "#F39C12", "#5499C7", "#2980B9", "#F39C12", "#2471A3", "#2471A3", "#F39C12"
+])'
+
 
 # Appliquer les couleurs aux nœuds dans le graphique
 p <- networkD3::sankeyNetwork(Links = links, Nodes = nodes, 
                               Source = "IDsource", Target = "IDtarget",
                               Value = "value", NodeID = "name", 
                    colourScale=my_color, LinkGroup="group", NodeGroup="group",
-                   fontSize = 15, fontFamily = 10)
+                   fontSize = 15, fontFamily = 10, sinksRight = FALSE, 
+                   nodeWidth = 10, height = 150, width = 1100)
 p
-
 
 
 # save the widget
 # library(htmlwidgets)
-htmlwidgets::saveWidget(p, file=paste0( getwd(), "/sankeyBasic1.html"))
+htmlwidgets::saveWidget(p, file= "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankeyBasic1.html")
+
+library(webshot)
+webshot("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankeyBasic1.html", "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankey.png", vwidth = 1100, vheight = 150, cliprect = "viewport")
+
+webshot("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankeyBasic1.html", "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankey_high_quality.pdf", vwidth = 1500, vheight = 200, cliprect = "viewport", zoom = 0.5)
 ```
+
 
 
 # FIGURE 2 : Over and under representation.
@@ -136,10 +145,10 @@ colors <- RColorBrewer::brewer.pal(5, "Set1")
 labels = c("Australs", "Gambier", "Marquesas", "Society", "Tuamotu")
 
 # PANEL A : Spatial distribution (you need to load shp file which is in GEOGRAPHIE DES ATOLLS)
-fig3_panelA <- function(dataset, habitat, deg, shp_data) {
+fig3_panelA <- function(dataset, Habitat, deg, shp_data) {
   
   dataset <- dataset %>%
-    filter(Habitat == habitat) %>% 
+    filter(habitat == Habitat) %>% 
     sf::st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
   
   grid <- shp %>% 
@@ -167,25 +176,25 @@ fig3_panelA <- function(dataset, habitat, deg, shp_data) {
   }
 
 ## PANEL B : Violin distribution 
-fig3_panelB <- function(dataset, habitat) {
+fig3_panelB <- function(dataset, Habitat) {
   
   dataset <- dataset %>%
-    filter(Habitat == habitat) %>%
-    dplyr::group_by(Archipel, ILE) %>%
+    filter(habitat == Habitat) %>%
+    dplyr::group_by(archipelago, island) %>%
     summarise(n_occ = n(),
-              n_species = n_distinct(ScientificName))
+              n_species = n_distinct(species))
     
     
-  gg <- ggplot(data = dataset, aes(x = log10(n_species+1), y = Archipel, colour = Archipel)) +
+  gg <- ggplot(data = dataset, aes(x = log10(n_species+1), y = archipelago, colour = archipelago)) +
     geom_point(show.legend = FALSE) +
-    geom_violin(aes(fill = Archipel), alpha = 0.3, show.legend = FALSE) +
+    geom_violin(aes(fill = archipelago), alpha = 0.3, show.legend = FALSE) +
     labs(title = "",
          x = "Species (log)",
          y = "Archipelagos") +
     scale_color_manual(values = colors, labels = labels) +
     scale_fill_manual(values = colors, labels = labels) +
     scale_y_discrete(labels = labels) +
-    ggrepel::geom_text_repel(aes(label = ILE), size = 3, color = "black") +
+    ggrepel::geom_text_repel(aes(label = island), size = 3, color = "black") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 12),  
         axis.text.y = element_text(angle = 45, hjust = 1, color = "black", size = 12),
@@ -199,11 +208,11 @@ fig3_panelB <- function(dataset, habitat) {
 
 # Figure 3 : FULL (Might take a little bit of time ~5min with n_grid = 50)
 ```{r}
-a <- fig3_panelA(working_dataset, "Marine", 0.5, shp)
-b <- fig3_panelA(working_dataset, "Terrestrial", 0.5, shp) + theme(axis.title.y = element_blank(), axis.text.y = element_blank())
+a <- fig3_panelA(filtered_data, "Marine", 0.5, shp)
+b <- fig3_panelA(filtered_data, "Terrestrial", 0.5, shp) + theme(axis.title.y = element_blank(), axis.text.y = element_blank())
 
-occurrences_mar <- fig3_panelB(working_dataset, "Marine")
-occurrences_terr <- fig3_panelB(working_dataset, "Terrestrial") + 
+occurrences_mar <- fig3_panelB(filtered_data, "Marine")
+occurrences_terr <- fig3_panelB(filtered_data, "Terrestrial") + 
   theme(axis.title.y = element_blank(), axis.text.y = element_blank())
 
 combined_plot <- cowplot::plot_grid(a, b, occurrences_mar, occurrences_terr, labels = c("Marine", "Terrestrial"), ncol = 2, nrow = 2) +
