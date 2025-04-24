@@ -6,7 +6,7 @@ set of records (e.g. occurrences), be aware that, because of storage space limit
 the code can't run without your record file. And some modifications are subject 
 to change, as some names have been filtered by hand.
 
-Only external data has been attached to the project at data/external; they are
+Only external data has been attached to the project at data/external; there are
 shapefiles of FP atolls and islands, airports, cities over 1000 inhabitants,
 rivers and roads.
 Raw and processed data are available at SEANOE db repo, see the linked article :
