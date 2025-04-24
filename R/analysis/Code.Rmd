@@ -1,0 +1,409 @@
+---
+title: "Curation_Filtering_Biogeography"
+author: "Kilian"
+date: "2024-04-06"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r Packages, message=FALSE, warning=FALSE}
+# remotes::install_github("Rekyt/rtaxref")
+# remotes::install_github(c("ropensci/taxize","ropensci/bold"))
+# install.packages(c("rgbif","worrms"))
+
+library(tidyverse)
+library(devtools)
+library(rtaxref)
+library(worrms)
+library(taxize)
+library(purrr)
+library(data.table)
+library(rgbif)
+```
+
+Tip: `rgbif::occ_download` can also be used but very time consuming.
+```{r file}
+install.packages("here")
+library(here)
+file_address <- here("Data/raw", "00_Raw_data.txt")
+file_address_annexe <- here("Data/processed" , "Annexe_Merged_Geodataset.csv")
+```
+
+```{r Data import}
+useful_columns <- c(1,8,9,21,30,39,59,60,61,81,88,89,123,130,138:146,
+                    148,152,156,158,160,163,166,176,177,180,188,189)
+
+gbif_obis_data <- data.table::fread(file_address, 
+                                   header = TRUE, 
+                                   quote = "", 
+                                   sep='\t', 
+                                   sep2 = '\t', 
+                                   na.strings = c("")) %>%
+  dplyr::filter(kingdom %in% c("Animalia")) %>% 
+  dplyr::select_if(~ !all(is.na(.))) %>% #Remove completely filled NA columns
+  dplyr::select(all_of(useful_columns)) 
+
+annexe_data_merged <- read_csv(file_address_annexe)
+```
+
+Literature and Expedition Data merging
+```{r}
+#identical(names(gbif_obis_data), names(annexe_data_merged))
+filtered_data <- bind_rows(gbif_obis_data,
+                           annexe_data_merged)
+```
+
+
+# Curation & Reliability
+## Taxonomic checking and Habitat.
+We take all the species present in the dataset. We have checked that the species column of the data from GBIF/OBIS was representative of the scientificName and acceptedScientificName, i.e., by format checking and testing we have concluded that the columns with 
+```{r Taxonomic status}
+scientificName_list <- unique(filtered_data$species) %>%
+  stats::na.omit()
+```
+
+### WoRMS
+We modify the worrms::wm_records_name() function to avoid an error when the 
+specie name is not recognized. 
+Worms_filtered object is a df with all the names
+recognized by WoRMS, be aware that the computation is energy-intensive 
+(~ 87 min for 6535 species), 
+tip : if your device is efficient enough, try : 
+furrr::future_map() instead of purrr::map().
+```{r Taxonomic status WoRMS chunk duration ~ 87min, eval = FALSE}
+get_worms_records <- possibly(worrms::wm_records_name, otherwise = NULL)
+
+Worms_filtered_df <- purrr::map(scientificName_list, ~ get_worms_records(.x)[1,]) %>% 
+  dplyr::bind_rows() 
+```
+
+To avoid the computation I wrote csv files for the next 4 comparisons.
+```{r}
+Worms_filtered_df <- read.csv(file.path("..", "Data", "01_Worms_Filtered_df.csv")) 
+```
+
+We keep specific columns from the data we have obtained after the WoRMS
+comparison, such as the Habitat, the valid scientific name, the taxon status..
+We standardize the status to GBIF taxonomicStatus.
+```{r}
+Worms_filtered_df <- Worms_filtered_df %>%
+  dplyr::select(c(3,5,10,14:18,21:25)) %>%
+  dplyr::mutate(
+    data_source_title = "World Register of Marine Species",
+    status = case_when(
+      status %in% c("accepted") ~ "ACCEPTED",
+      status %in% c("taxon inquirendum", "unaccepted", "unassessed", "uncertain", "nomen dubium", "nomen nudum", "deleted") ~ "DOUBTFUL",
+      status %in% c("junior subjective synonym", "misspelling", "superseded combination", "unreplaced junior homonym", "alternative representation") ~ "SYNONYM")) %>%
+  dplyr::rename(species = scientificname) %>%
+  dplyr::filter(!is.na(species))
+
+```
+
+#### Merge with original data (1/5)
+We didn't change every taxonomical rank according to the status value, because
+we assumed that if a taxonomic error happens, it would mainly occurs at the 
+specie level (source : Bonnet-Lebrun 2019)
+```{r}
+filtered_data <- dplyr::left_join(filtered_data, Worms_filtered_df, by = "species") %>%
+  dplyr::mutate(
+    species = dplyr::case_when(
+      status %in% c("DOUBTFUL","SYNONYM") ~ valid_name, TRUE ~ species),
+    taxonomicStatus = dplyr::case_when(
+      !is.na(status) & status != taxonomicStatus ~ status,
+      TRUE ~ taxonomicStatus),
+    phylum = dplyr::coalesce(phylum.x, phylum.y), #phylum will be filled by phylum.x except if phylum.x = NA
+    class = dplyr::coalesce(class.x, class.y),
+    order = dplyr::coalesce(order.x, order.y),
+    family = dplyr::coalesce(family.x, family.y),
+    genus = dplyr::coalesce(genus.x, genus.y)) %>%
+  dplyr::select(-ends_with(".x"), -ends_with(".y"), -c("status", "valid_name"))
+  
+```
+
+### Taxize
+We still have unmatched/unrecognized taxa from WoRMS, that can be because of the
+marine speciality of it. Therefore we use the `gnr_resolve()` function of the 
+taxize package in order to retrieve those taxa, and add a source. 
+(loop duration ~12' for 1670 species)
+```{r,Taxonomic status Taxize, eval=FALSE}
+unmatched_taxa <- filtered_data %>%
+  dplyr::filter(is.na(isMarine) & is.na(isFreshwater) & is.na(isBrackish) & is.na(isTerrestrial)) %>%
+  dplyr::select(species) %>%
+  unique() %>%
+  stats::na.omit() %>%
+  as.list()
+
+Taxize_filtered_df <- purrr::map(unmatched_taxa[[1]], ~ taxize::gna_verifier(.x)[1,]) %>%
+  dplyr::bind_rows() %>%
+  dplyr::mutate(species = case_when(
+    !is.na(submittedName) & !is.na(matchedCanonicalFull) & coalesce(submittedName, "") != matchedCanonicalFull ~ matchedCanonicalFull,
+    TRUE ~ submittedName),
+    data_source_title = dataSourceTitleShort) %>%
+  dplyr::select(species, data_source_title)
+
+# write.csv(Taxize_filtered_df, "02_Taxize_filtered_df_updated.csv", row.names = FALSE)
+```
+
+
+#### Merge with original data (2/5)
+```{r}
+Taxize_filtered_df <- read.csv(file.path("..", "Data/processed", "02_Taxize_filtered_df.csv"))
+
+filtered_data <- dplyr::left_join(filtered_data, Taxize_filtered_df, by = "species") %>%
+  dplyr::mutate(
+    data_source_title = dplyr::coalesce(data_source_title.x, data_source_title.y)
+  ) %>%
+  dplyr::select(-ends_with(".x"), -ends_with(".y"))
+```
+
+
+### Taxref
+To get the end of Habitats informations and Biogeographical status
+duration chunk (~50 min/8201 species), be aware that Taxref API is unstable.
+```{r, eval = FALSE}
+Taxref_filtered_df <- 
+  purrr::map(scientificName_list, ~ rtaxref::rt_taxa_search(sciname = .x)[1,]) %>%
+  dplyr::bind_rows() %>%
+  dplyr::select(c("scientificName","habitat","pf")) %>% 
+  dplyr::rename("species" = "scientificName",
+                "habitat_taxref" = "habitat") %>%
+  dplyr::filter(!is.na(species)) %>%
+  dplyr::distinct()
+```
+
+```{r}
+Taxref_filtered_df <- read.csv(file.path("..", "Data", "03_Taxref_filtered_df.csv"))
+```
+
+#### Merge with original data (3/5)
+```{r}
+filtered_data <- dplyr::left_join(filtered_data, Taxref_filtered_df, by = "species") %>%
+  dplyr::mutate(isMarine_taxref = dplyr::case_when(habitat_taxref %in% c(1, 4, 5) ~ 1, TRUE ~ NA),
+         isFresh_taxref = dplyr::case_when(habitat_taxref %in% c(2, 4, 8) ~ 1, TRUE ~ NA),
+         isTerrestrial_taxref = dplyr::case_when(habitat_taxref %in% c(3, 8, 7) ~ 1, TRUE ~ NA),
+         isBrackish_taxref = ifelse(habitat_taxref == 6, 1 ,NA)) %>%
+  dplyr::mutate(isMarine = dplyr::coalesce(isMarine, isMarine_taxref),
+                isFreshwater = dplyr::coalesce(isFreshwater, isFresh_taxref),
+                isTerrestrial = dplyr::coalesce(isTerrestrial, isTerrestrial_taxref),
+                isBrackish = dplyr::coalesce(isBrackish, isBrackish_taxref),
+                biogeoStatus = pf) %>%
+  dplyr::select(-c("isMarine_taxref","isFresh_taxref","isTerrestrial_taxref","isBrackish_taxref","pf"))
+```
+
+### Handmade check
+```{r}
+Handmade_filtered_df <- read.csv(file.path("..", "Data/processed", "04_Handmade_filtered_df.csv")) %>%
+  dplyr::rename("data_source_title" = "V2")
+```
+
+#### Merge with filtered_data (4/5)
+We consider WoRMS as most reliable source for habitat
+```{r}
+filtered_data <- dplyr::left_join(filtered_data, Handmade_filtered_df, by = "acceptedScientificName") %>%
+  dplyr::mutate(isMarine = dplyr::coalesce(isMarine.x, isMarine.y), 
+                isFreshwater = dplyr::coalesce(isFreshwater.x, isFreshwater.y),
+                isTerrestrial = dplyr::coalesce(isTerrestrial.x, isTerrestrial.y),
+                isBrackish = dplyr::coalesce(isBrackish.x, isBrackish.y),
+                data_source_title = dplyr::coalesce(data_source_title.x, data_source_title.y)) %>%
+  dplyr::select(-ends_with(".x"), -ends_with(".y"))
+```
+
+# Additional data
+## Institution vs citizen science.
+```{r}
+institutions_liste <- c("museum", "Museum", "Institute", "institute", "institution",
+                     "Institution", "lab", "Lab", "laboratory", "Laboratory", 
+                     "university", "University", "institut", "Institut", 
+                     "Fishbase", "Academy", "Museums", "Muséum", "UMS", 
+                     "Observatory", "Observatories", "Center", "center",
+                     "Figshare (CRIOBE) Brandl et al. 2025",
+                     "Fishnet","Tuhaa Pae 2013 (MNHN)", "TARASOC (MNHN)",
+                     "RAPA 2002 (MNHN)", "PAKAIHI I TE MOANA (MNHN)",
+                     "MUSORSTOM 9 (MNHN)", "BENTHAUS (MNHN)")
+
+institutionals_names <- c("European Nucleotide Archive (EMBL-EBI)","MGnify",
+                         "Commonwealth Scientific and Industrial Research Organisation",
+                         "Zoologische Staatssammlung","Senckenberg",
+                         "Senckenberg - CeDAMar Provider", "United States Geological Survey",
+                         "Secretariat of the Pacific Regional Environment Programme",
+                         "British Antarctic Survey","Virginia Tech Insect Collection", 
+                         "CBGP (UMR INRA, Cirad, IRD, Montpellier SupAgro)",
+                         "The International Barcode of Life Consortium",
+                         "Zoologische Staatssammlung München/Staatliche Naturwissenschaftliche Sammlungen Bayerns", "Polynesian Shark Observatory (ORP)")
+
+filtered_data <- filtered_data %>%
+  mutate(sourceScore = ifelse(grepl(paste(institutions_liste, collapse = "|"), 
+                                    publisher, ignore.case = TRUE), 
+                               "Institution",
+                              ifelse(publisher %in% institutionals_names, 
+                                     "Institution", "citizenScience")))
+```
+
+
+## Island and archipelagos
+```{r}
+shp_file_path <- file.path("..", "Data/external", "shp_pf")
+```
+
+```{r}
+shp <- sf::st_read(dsn = shp_file_path) %>%
+  sf::st_transform(crs = 4326) %>%
+  sf::st_make_valid() %>% 
+  dplyr::mutate(ILE = ifelse(OBJECTID %in% c(24733, 24734), "MOTU ONE (Mar)", ILE)) %>%
+  dplyr::select("OBJECTID", "Carto", "ILE", "geometry")
+
+dataset_to_sf <- sf::st_as_sf(filtered_data, 
+                              coords = c("decimalLongitude", "decimalLatitude"), 
+                              crs = 4326) %>%
+  sf::st_make_valid()
+```
+
+##### Island, atolls and archipelagos
+```{r}
+atolls_tuamotu_df <- data.frame(
+  island = toupper(c("Mataiva", "Tikehau", "Rangiroa", "Makatea", "Niau", "Kaukura", 
+                  "Arutua", "Apataki", "Toau", "Aratika", "Fakarava", "Kauehi", 
+                  "Raraka", "Faaite", "Katiu", "Tahanea", "Hiti", "Makemo", 
+                  "Manihi", "Ahe", "Takaroa", "Takapoto", "Tikei", "Taiaro", 
+                  "Tepoto sud", "Motutunga","Anaa", "Taenga", "Takume", "Raroia", 
+                  "Nihiru", "Marutea nord", "Haraiki", "Reitoru", "Rekareka", 
+                  "Tauere", "Tekokota", "Hikueru", "Marokau", "Ravahere", 
+                  "Amanu", "Hao", "Nengonengo", "Napuka", "Tepoto nord", 
+                  "Fangatau", "Fakahina", "Pukapuka","Tatakoto", "Pukarua", 
+                  "Reao", "Manuhangi", "Paraoa", "Vairaatea", "Ahunui", 
+                  "Nukutavake", "Akiaki", "Pinaki", "Vahitahi", "Hereheretue",
+                  "Anuanurunga", "Anuanuraro", "Nukutepipi","Tuanake")),
+  archipelago = rep("Tuamotu", 64)
+)
+
+atolls_gambier_df <- data.frame(
+  island = toupper(c("Tematangi", "Tureia", "Moruroa", "Fangataufa",
+                  "Vahanga", "Tenarunga", "Tenararo", "Vanavana", "Maturei vavao",
+                  "Maria est", "Marutea sud", "Temoe", "Morane", "Mangareva",
+                  "Banc portland", "Recif de la minerve")),
+  archipelago = rep("Gambiers", 16)
+)
+
+atolls_societe_df <- data.frame(
+  island = toupper(c("Tahiti", "Moorea", "Maiao", "Tetiaroa", "Mehetia",
+                  "Huahine", "Raiatea-Tahaa", "Bora Bora", "Tupai", "Maupiti",
+                  "Maupihaa", "Motu One", "Manuae")),
+  archipelago = rep("Society", 13)
+)
+
+atolls_australes_df <- data.frame(
+  island = toupper(c("Maria", "Rimatara", "Rurutu", "Tubuai", "Raivavae", "Rapa",
+                  "Marotiri","Banc president thiers","Banc neilson",
+                  "Banc mac donald", "Recif arago")),
+  archipelago = rep("Austral", 11)
+)
+
+atolls_marquises_df <- data.frame(
+  island = toupper(c("Hatutaa","Eiao","Hatu Iti","Nuku Hiva","Ua Huka","Ua Pou", 
+                  "Fatu Huku","Hiva Oa", "Fatu Hiva", "Tahuata","Mohotani",
+                  "Motukua","Rocher thomasset","Motu nao","Banc lawson",
+                  "Banc clark","Motu one (Mar)")),
+  archipelago = rep("Marquesas", 17)
+)
+
+atolls <- rbind(atolls_tuamotu_df, atolls_gambier_df, atolls_societe_df, 
+                atolls_australes_df, atolls_marquises_df)
+```
+
+##### Nearest island and archipelago. 
+(~40 sec)
+```{r}
+nearest_island_archipelago <- sf::st_nearest_feature(dataset_to_sf, shp) %>%
+  as.data.frame() %>%
+  dplyr::rename("OBJECTID" = ".") %>%
+  dplyr::left_join(shp, by = "OBJECTID") %>%
+  dplyr::select("ILE") %>%
+  dplyr::rename("island" = "ILE") %>%
+  dplyr::left_join(atolls, by = "island")
+```
+
+#### Merge with filtered data (5/5)
+```{r}
+filtered_data <- cbind(filtered_data, nearest_island_archipelago) %>%
+  dplyr::mutate(archipelago = ifelse(island == "MOTU ONE (Mar)", "Marquesas", archipelago))
+```
+
+# Filtering
+## Habitat description and last modifications
+We replace 0 by NA from habitat in order to simplify next steps.
+We modify last name issues (detailed in complementaryTests.Rmd n°3)
+```{r}
+valid_basis_of_record <- c("HUMAN_OBSERVATION", "MACHINE_OBSERVATION", "MATERIAL_SAMPLE", "MATERIAL_CITATION", "PRESERVED_SPECIMEN")
+
+
+filtered_data <- filtered_data %>%
+  mutate(
+     # Cleaning binary habitats (0 → NA)
+    across(c(isMarine, isBrackish, isFreshwater, isTerrestrial),
+           ~ ifelse(. == 0, NA, .)),
+    
+     # Habitat issues
+    isBrackish = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isBrackish),
+    isFreshwater = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isFreshwater),
+    isMarine = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isMarine),
+    isTerrestrial = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), 1, isTerrestrial),
+    
+    # scientificName issues
+    species = if_else(scientificName == "Oliva annulata (Gmelin, 1791)", "Oliva annulata", species),
+    species = if_else(scientificName == "Phos varicosus Gould, 1849", "Phos varicosus", species),
+    
+    # cleaning with (subgenus) or Genus species subspecies issues
+    species = str_replace(species, "^([\\w-]+) \\([^\\)]+\\) ([\\w-]+)$", "\\1 \\2"), # delete the word between brackets
+    species = str_replace(species, "^(\\S+\\s+)(\\S+)\\s+\\2$", "\\1\\2"),               # delete last word if 2nd and 3rd words same
+    
+    # hand check
+    species = case_when(
+      str_detect(species, "^Stenetriidae incertae sedis") ~ str_remove(species, "incertae sedis\\s*"),
+      species == "Arctocephalus australis forsteri" ~ "Arctocephalus australis",
+      species == "Oliva ozodona nitidula" ~ "Oliva ozodona",
+      TRUE ~ species)
+  ) %>% 
+  mutate(habitat = case_when(
+    isMarine == 1 & is.na(isBrackish) & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+    is.na(isMarine) & is.na(isBrackish) & isTerrestrial == 1 & is.na(isFreshwater) ~ "Terrestrial",
+    is.na(isMarine) & isBrackish == 1 & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+    is.na(isMarine) & is.na(isBrackish) & is.na(isTerrestrial) & isFreshwater == 1 ~ "Freshwater",
+    isMarine == 1 & isBrackish == 1 & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+    isMarine == 1 & is.na(isBrackish) & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine and Fresh",
+    isMarine == 1 & is.na(isBrackish) & isTerrestrial == 1 & is.na(isFreshwater) ~ "Marine and Terrestrial",
+    is.na(isMarine) & isBrackish == 1 & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine",
+    is.na(isMarine) & isBrackish == 1 & isTerrestrial == 1 & is.na(isFreshwater) ~ "Brackish and Terrestrial",
+    is.na(isMarine) & is.na(isBrackish) & isTerrestrial == 1 & isFreshwater == 1 ~ "Fresh and Terrestrial",
+    is.na(isMarine) & isBrackish == 1 & isTerrestrial == 1 & isFreshwater == 1 ~ "Brackish, Fresh and Terrestrial",
+    isMarine == 1 & isBrackish == 1 & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine",
+    isMarine == 1 & isBrackish == 1 & isTerrestrial == 1 & is.na(isFreshwater) ~ "Marine, Brackish and Terrestrial",
+    isMarine == 1 & is.na(isBrackish) & isTerrestrial == 1 & isFreshwater == 1 ~ "Marine, Fresh and Terrestrial",
+    isMarine == 1 & isBrackish == 1 & isTerrestrial == 1 & isFreshwater == 1 ~ "Marine, Brackish, Fresh and Terrestrial", TRUE ~ "Undetermined"
+  ))
+
+```
+
+# FILTERING
+```{r}
+filtered_data <- filtered_data %>%
+  dplyr::filter(year >= 1950,
+    occurrenceStatus == "PRESENT",
+    basisOfRecord %in% valid_basis_of_record,
+    !is.na(species)) %>%
+  dplyr::distinct(decimalLatitude, decimalLongitude, year, month, day, species, .keep_all = TRUE) %>%
+  dplyr::filter(!is.na(isMarine) | !is.na(isFreshwater) | !is.na(isBrackish) | !is.na(isTerrestrial)) 
+```
+
+
+```{r}
+#write.csv2(filtered_data, file = "05_Filtered_data_updated.csv", row.names = FALSE)
+```
+
+
+
+
+
+
+
+

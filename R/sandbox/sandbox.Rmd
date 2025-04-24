@@ -1,0 +1,500 @@
+---
+title: "Messy scrap dump code"
+author: "Kilian BARREIRO"
+date: "2025-04-20"
+output: html_document
+knit: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# MERGED
+## SEGUIGNE (2020) 
+```{r}
+# #%>% distinct(day, month, year, decimalLatitude, decimalLongitude, species, .keep_all = TRUE) 
+# 
+# # diff_ORP_vs_ref <- anti_join(ORPData, Filtered_data, 
+# #                              by = columns_to_compare)
+# # 
+# # 
+# # diff_ORP_vs_ref_worms <- unique(diff_ORP_vs_ref$species) %>%
+# #   stats::na.omit() %>%
+# #   purrr::map(~ get_worms_records(.x)[1,]) %>%
+# #   dplyr::bind_rows()
+# # 
+# # geodataset_SEGUIGNE_2020 <- left_join(diff_ORP_vs_ref, diff_ORP_vs_ref_worms,
+# #                                     by = c("species" = "scientificname")) %>%
+# #   mutate(
+# #     scientificName = species, acceptedScientificName = valid_name, 
+# #     species = valid_name, locality = Name_Site, 
+# #     specificEpithet = word(acceptedScientificName, 2),
+# #     publisher = "Polynesian Shark Observatory (ORP)",
+# #     basisOfRecord = "HUMAN_OBSERVATION", sourceScore = "citizenScience",
+# #     data_source_title = "World Register of Marine Species",
+# #     occurrenceStatus = "PRESENT", publishingCountry = "FR",
+# #     identificationRemarks = NA, individualCount = NA, taxonRank = NA,
+# #     taxonomicStatus = NA, elevation = NA,depth = NA, issue = NA,
+# #     hasGeospatialIssues = NA, iucnRedListCategory = NA, habitat_taxref = NA,
+# #     biogeoStatus = NA, habitat = NA, gbifID = NA, references = NA, 
+# #     subfamily = NA, genericName = NA, protocol = NA, level1Name = NA,
+# #     island = NA, archipelago = NA
+# #   ) 
+# 
+# geodataset_SEGUIGNE_2020 <- geodataset_SEGUIGNE_2020 %>%
+#   select(-all_of(setdiff(colnames(geodataset_SEGUIGNE_2020), colnames(Filtered_data_ori)))) %>% 
+#   select(all_of(colnames(Filtered_data_ori))) %>% 
+#   # Forcer les types des colonnes à ceux de Filtered_data_ori
+#   mutate(across(
+#     intersect(names(.), names(Filtered_data_ori)),
+#     ~ as(., class(Filtered_data_ori[[cur_column()]]))
+#   )) %>% 
+#   mutate(across(
+#     all_of(c("isMarine","isFreshwater","isTerrestrial","isBrackish")), 
+#     ~ as.numeric(.),
+#     .names = "{.col}"
+#   )) 
+# 
+# # geodataset_SEGUIGNE_2020 <- anti_join(geodataset_SEGUIGNE_2020, Filtered_data_ori, 
+# #                              by = columns_to_compare)
+# 
+# # Verifications
+# # setequal(colnames(geodataset_SEGUIGNE_2020), colnames(Filtered_data_ori))
+# # mismatched_types <- sapply(colnames(Filtered_data_ori), function(col) {
+# #   !identical(class(Filtered_data_ori[[col]]), class(geodataset_SEGUIGNE_2020[[col]]))
+# # })
+# # names(mismatched_types[mismatched_types]) 
+# 
+# #write.csv(geodataset_SEGUIGNE_2020, "geodataset_SEGUIGNE_2020.csv", row.names = FALSE)
+```
+
+
+## BRANDL (2025) 
+```{r}
+# Séparer les données en deux parties selon la ligne 1938 car on a deux formats de date différents
+BRANDL_1 <- moorea_communities_allyears %>%
+  {list(
+    part1 = .[1:1938, ] %>% mutate(Date = mdy(Date)),
+    part2 = .[1939:nrow(.), ] %>% mutate(Date = dmy(Date))
+  )} %>%
+  {rbind(.$part1, .$part2)} %>%
+  mutate(
+    Date = as.Date(Date),
+    day = as.numeric(format(Date, "%d")),
+    month = as.numeric(format(Date, "%m")),
+    year = as.numeric(format(Date, "%Y")),
+    decimalLatitude = Lat, #round(Lat, 4),
+    decimalLongitude = Long #round(Long, 4)
+  ) %>%
+  mutate(Species = str_extract(Species, "^\\S+")) %>% #extrait premier mot
+  filter(!str_detect(Species, "[A-Z0-9]")) %>% #assure pas de Majuscule ou Chiffre
+  mutate(species = paste(Genus, Species, sep = " ")) %>%
+  distinct(day, month, year, decimalLatitude, decimalLongitude, species, .keep_all = TRUE)
+
+diff_BRANDL3_vs_BRANDL1 <- anti_join(BRANDL_3, BRANDL_1, by = columns_to_compare) %>%
+  mutate(across(
+    intersect(names(.), names(BRANDL_1)),
+    ~ suppressWarnings(as(., class(BRANDL_1[[cur_column()]])))
+  )) %>% 
+  select(-all_of(setdiff(colnames(BRANDL_3), colnames(BRANDL_1)))) %>% 
+  select(all_of(colnames(BRANDL_1)))
+
+BRANDL_3 <- crypto_sia_2019 %>%
+  mutate(
+    Date = lubridate::dmy(Date),
+    day = as.numeric(format(Date, "%d")),
+    month = as.numeric(format(Date, "%m")),
+    year = as.numeric(format(Date, "%Y")),
+    decimalLatitude = Lat, #round(Lat, 4),
+    decimalLongitude = Long #round(Long, 4)
+  ) %>%
+  mutate(Species = str_extract(Species, "^\\S+")) %>% #extrait premier mot
+  filter(!str_detect(Species, "[A-Z0-9]")) %>% #assure pas de Majuscule ou Chiffre
+  mutate(species = paste(Genus, Species, sep = " ")) %>%
+  distinct(day, month, year, decimalLatitude, decimalLongitude, species, .keep_all = TRUE)
+
+
+
+BRANDL <- bind_rows(BRANDL_1, diff_BRANDL3_vs_BRANDL1) %>% 
+  distinct(day, month, year, decimalLatitude, decimalLongitude, species, .keep_all = TRUE)#seul le 3e dataset avait des info supp, le distinct() à été appliqué avant
+
+diff_BRANDL_vs_ref <- anti_join(BRANDL, Filtered_data, by = columns_to_compare) 
+
+diff_BRANDLSPECIES_worms <- unique(diff_BRANDL_vs_ref$species) %>%
+  stats::na.omit() %>%
+  purrr::map(~ get_worms_records(.x)[1,]) %>%
+  dplyr::bind_rows() 
+
+
+geodataset_BRANDL_2025 <- left_join(diff_BRANDL_vs_ref, diff_BRANDLSPECIES_worms,
+                                    by = c("species" = "scientificname")) 
+
+
+
+geodataset_BRANDL_2025 <- geodataset_BRANDL_2025 %>% 
+  mutate(
+    scientificName = species, acceptedScientificName = valid_name, 
+    species = valid_name, locality = Sitename, depth = Depth,
+    specificEpithet = word(acceptedScientificName, 2),
+    publisher = "Figshare (CRIOBE) Brandl et al. 2025",
+    basisOfRecord = "HUMAN_OBSERVATION", sourceScore = "Institution",
+    data_source_title = "World Register of Marine Species",
+    occurrenceStatus = "PRESENT", publishingCountry = "FR",
+    identificationRemarks = NA, individualCount = NA, taxonRank = NA,
+    taxonomicStatus = NA, elevation = NA, issue = NA,
+    hasGeospatialIssues = NA, iucnRedListCategory = NA, habitat_taxref = NA,
+    biogeoStatus = NA, habitat = NA, gbifID = NA, references = NA, 
+    subfamily = NA, genericName = NA, protocol = NA, level1Name = NA,
+    island = NA, archipelago = NA) %>% 
+  select(-all_of(setdiff(colnames(geodataset_BRANDL_2025), colnames(Filtered_data_ori)))) %>% 
+  select(all_of(colnames(Filtered_data_ori))) %>% 
+  # Forcer les types des colonnes à ceux de Filtered_data_ori
+  mutate(across(
+    intersect(names(.), names(Filtered_data_ori)),
+    ~ as(., class(Filtered_data_ori[[cur_column()]]))
+  )) %>% 
+  mutate(across(
+    all_of(c("isMarine","isFreshwater","isTerrestrial","isBrackish","isExtinct")), 
+    ~ as.numeric(.),
+    .names = "{.col}"
+  )) 
+
+# setequal(colnames(geodataset_BRANDL_2025), colnames(Filtered_data_ori))
+# mismatched_types <- sapply(colnames(Filtered_data_ori), function(col) {
+#   !identical(class(Filtered_data_ori[[col]]), class(geodataset_BRANDL_2025[[col]]))
+# })
+# names(mismatched_types[mismatched_types])
+
+# geodataset_BRANDL_2025 <- anti_join(geodataset_BRANDL_2025, Filtered_data_ori, 
+#                              by = columns_to_compare)
+
+
+# write.csv(geodataset_BRANDL_2025, "geodataset_BRANDL_2025.csv", row.names = FALSE)
+
+
+# On doit vérifier les dates car si elles ne sont pas bien parsées, leur conversion dans les colonnes day, month and years vont entrainer des erreurs
+
+```
+
+
+
+
+## FISHNET 
+```{r}
+
+#%>%  distinct(day, month, year, decimalLatitude, decimalLongitude, species, .keep_all = TRUE)
+
+diff_FISHNET_vs_ref <- anti_join(FISHNET, Filtered_data, 
+                             by = columns_to_compare) 
+
+diff_FISHNET_vs_ref_worms <- unique(diff_FISHNET_vs_ref$species) %>%
+  stats::na.omit() %>%
+  purrr::map(~ get_worms_records(.x)[1,]) %>%
+  dplyr::bind_rows() 
+# %>%  filter(status == "accepted")
+
+NEWFISHNET <- FISHNET %>% 
+  left_join(diff_FISHNET_vs_ref_worms, by = c("species" = "scientificname")) %>%
+  mutate(species = if_else(status != "accepted" & !is.na(valid_name), valid_name, species))
+
+# publisher = "Fishnet", sourceScore = "citizenScience",
+#     data_source_title = "World Register of Marine Species",
+#     occurrenceStatus = "PRESENT", publishingCountry = "FR",
+#     individualCount = NA, taxonRank = NA,
+#     taxonomicStatus = NA, issue = NA,
+#     hasGeospatialIssues = NA, iucnRedListCategory = NA, habitat_taxref = NA,
+#     biogeoStatus = NA, habitat = NA, gbifID = NA, references = NA, 
+#     subfamily = NA,  protocol = NA, level1Name = NA,
+#     island = NA, archipelago = NA
+
+
+    
+    
+# locality = Location, genus = Genus,
+# scientificName = species, 
+# specificEpithet = Species,
+#  taxonomicStatus = NA, publishingCountry = "FR",
+# elevation = NA, depth = Depth, issue = NA, hasGeospatialIssues = NA,
+# acceptedScientificName = NA, protocol = NA, level1Name = Habitat,
+# iucnRedListCategory = NA
+
+
+# geodataset_FISHNET <- anti_join(geodataset_FISHNET, Filtered_data_ori, 
+#                              by = columns_to_compare)
+
+# setequal(colnames(geodataset_FISHNET), colnames(Filtered_data_ori))
+# mismatched_types <- sapply(colnames(Filtered_data_ori), function(col) {
+#   !identical(class(Filtered_data_ori[[col]]), class(geodataset_FISHNET[[col]]))
+# })
+# names(mismatched_types[mismatched_types]) 
+```
+
+## EXPEDITIONS
+```{r}
+# diff_expdata_vs_ref <- anti_join(expeditionsMerged, Filtered_data, 
+#                              by = columns_to_compare) %>% 
+#   select(-all_of(c("class","order","family","genus")))
+# 
+# diff_expdata_vs_ref_worms <- unique(diff_expdata_vs_ref$species) %>%
+#   stats::na.omit() %>%
+#   purrr::map(~ get_worms_records(.x)[1,]) %>%
+#   dplyr::bind_rows()
+
+
+# geodataset_expedition <- left_join(diff_expdata_vs_ref, diff_expdata_vs_ref_worms, by = c("species" = "scientificname")) %>%
+#   mutate(species = if_else(status != "accepted" & !is.na(valid_name), valid_name, species))
+
+# %>% 
+#   mutate(across(
+#     all_of(c("isMarine","isFreshwater","isTerrestrial","isBrackish","isExtinct")), 
+#     ~ as.numeric(.),
+#     .names = "{.col}"
+#   )) 
+
+# scientificName = species, acceptedScientificName = valid_name, 
+#     species = valid_name, 
+#     specificEpithet = word(acceptedScientificName, 2),
+#     publisher = paste(expedition, "(MNHN)"),
+#      sourceScore = "Institution",
+#     data_source_title = "World Register of Marine Species",
+#      
+#     taxonRank = rank,
+#       
+#     hasGeospatialIssues = NA,  habitat_taxref = NA,
+#     biogeoStatus = NA, habitat = NA,  
+#      protocol = NA, level1Name = NA,
+#     island = NA, archipelago = NA) %>% 
+#   select(-all_of(setdiff(colnames(geodataset_expedition), colnames(Filtered_data_ori)))) %>% 
+# geodataset_expedition <- anti_join(geodataset_expedition, Filtered_data_ori, 
+#                              by = columns_to_compare)
+```
+
+
+## Final Merge
+### Merging Process
+```{r}
+# setequal(colnames(geodataset_BRANDL_2025), colnames(Filtered_data_ori))
+# mismatched_types <- sapply(colnames(Filtered_data_ori), function(col) {
+#   !identical(class(Filtered_data_ori[[col]]), class(geodataset_BRANDL_2025[[col]]))
+# })
+# names(mismatched_types[mismatched_types])
+
+unmatched_taxa <- Annexe_Data_Merged %>%
+  filter(is.na(species), !is.na(scientificName)) %>%
+  distinct(scientificName) %>%
+  pull(scientificName) 
+
+Taxize_filtered_df <- purrr::map(unmatched_taxa, ~ taxize::gna_verifier(.x)[1, ]) %>%
+  bind_rows() %>%
+  filter(str_count(matchedCanonicalFull, "\\S+") == 2) %>%
+  mutate(
+    species_resolved = matchedCanonicalFull,
+    source_species_resolved = dataSourceTitleShort
+  )
+
+
+geodataset_AnnexeDatasetMerged <- Annexe_Data_Merged %>%
+  left_join(
+    Taxize_filtered_df %>% select(submittedName, matchedCanonicalFull, dataSourceTitleShort),
+    by = c("scientificName" = "submittedName")
+  ) %>%
+  mutate(
+    data_source_title = if_else(is.na(species) & !is.na(matchedCanonicalFull), dataSourceTitleShort, data_source_title),
+    species = if_else(is.na(species) & !is.na(matchedCanonicalFull), matchedCanonicalFull, species)
+  ) %>%
+  filter(!is.na(species)) %>% 
+  select(all_of(colnames(Annexe_Data_Merged)))
+
+
+Taxref_filtered_df <- 
+  purrr::map(scientificName_list, ~ rtaxref::rt_taxa_search(sciname = .x)[1,]) %>%
+  dplyr::bind_rows() %>%
+  dplyr::select(c("scientificName","habitat","pf")) %>% 
+  dplyr::rename("species" = "scientificName",
+                "habitat_taxref" = "habitat") %>%
+  dplyr::filter(!is.na(species)) %>%
+  dplyr::distinct()
+
+filtered_data <- dplyr::left_join(filtered_data, Taxref_filtered_df, by = "species") %>%
+  dplyr::mutate(isMarine_taxref = dplyr::case_when(habitat_taxref %in% c(1, 4, 5) ~ 1, TRUE ~ NA),
+         isFresh_taxref = dplyr::case_when(habitat_taxref %in% c(2, 4, 8) ~ 1, TRUE ~ NA),
+         isTerrestrial_taxref = dplyr::case_when(habitat_taxref %in% c(3, 8, 7) ~ 1, TRUE ~ NA),
+         isBrackish_taxref = ifelse(habitat_taxref == 6, 1 ,NA)) %>%
+  dplyr::mutate(isMarine = dplyr::coalesce(isMarine, isMarine_taxref),
+                isFreshwater = dplyr::coalesce(isFreshwater, isFresh_taxref),
+                isTerrestrial = dplyr::coalesce(isTerrestrial, isTerrestrial_taxref),
+                isBrackish = dplyr::coalesce(isBrackish, isBrackish_taxref),
+                biogeoStatus = pf) %>%
+  dplyr::select(-c("isMarine_taxref","isFresh_taxref","isTerrestrial_taxref","isBrackish_taxref","pf"))
+```
+
+### Last modifs Code.R
+```{r}
+# %>%
+#   mutate(habitat = case_when(
+#     isMarine == 1 & is.na(isBrackish) & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+#     is.na(isMarine) & is.na(isBrackish) & isTerrestrial == 1 & is.na(isFreshwater) ~ "Terrestrial",
+#     is.na(isMarine) & isBrackish == 1 & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+#     is.na(isMarine) & is.na(isBrackish) & is.na(isTerrestrial) & isFreshwater == 1 ~ "Freshwater",
+#     isMarine == 1 & isBrackish == 1 & is.na(isTerrestrial) & is.na(isFreshwater) ~ "Marine",
+#     isMarine == 1 & is.na(isBrackish) & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine and Fresh",
+#     isMarine == 1 & is.na(isBrackish) & isTerrestrial == 1 & is.na(isFreshwater) ~ "Marine and Terrestrial",
+#     is.na(isMarine) & isBrackish == 1 & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine",
+#     is.na(isMarine) & isBrackish == 1 & isTerrestrial == 1 & is.na(isFreshwater) ~ "Brackish and Terrestrial",
+#     is.na(isMarine) & is.na(isBrackish) & isTerrestrial == 1 & isFreshwater == 1 ~ "Fresh and Terrestrial",
+#     is.na(isMarine) & isBrackish == 1 & isTerrestrial == 1 & isFreshwater == 1 ~ "Brackish, Fresh and Terrestrial",
+#     isMarine == 1 & isBrackish == 1 & is.na(isTerrestrial) & isFreshwater == 1 ~ "Marine",
+#     isMarine == 1 & isBrackish == 1 & isTerrestrial == 1 & is.na(isFreshwater) ~ "Marine, Brackish and Terrestrial",
+#     isMarine == 1 & is.na(isBrackish) & isTerrestrial == 1 & isFreshwater == 1 ~ "Marine, Fresh and Terrestrial",
+#     isMarine == 1 & isBrackish == 1 & isTerrestrial == 1 & isFreshwater == 1 ~ "Marine, Brackish, Fresh and Terrestrial", TRUE ~ "Undetermined"
+#   ))
+
+filtered_data <- filtered_data %>%
+  mutate(
+    habitat = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), "Terrestrial", habitat),
+    isBrackish = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isBrackish),
+    isFreshwater = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isFreshwater),
+    isMarine = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), NA, isMarine),
+    isTerrestrial = if_else(species %in% c("Opogona aurisquamosa", "Tryngites subruficollis"), 1, isTerrestrial),
+    species = if_else(scientificName == "Oliva annulata (Gmelin, 1791)", "Oliva annulata", species),
+    species = if_else(scientificName == "Phos varicosus Gould, 1849", "Phos varicosus", species)
+  ) %>% 
+  mutate(
+    # Nettoyage des noms scientifiques
+    species = str_replace(species, "^([\\w-]+) \\([^\\)]+\\) ([\\w-]+)$", "\\1 \\2"), # supprime le mot entre parenthèses
+    species = str_replace(species, "^((\\S+\\s+\\S+))\\s+\\2$", "\\1"),               # supprime le 3e mot si redondant
+    
+    # Corrections spécifiques manuelles
+    species = case_when(
+      str_detect(species, "^Stenetriidae incertae sedis") ~ str_remove(species, "incertae sedis\\s*"),
+      species == "Arctocephalus australis forsteri" ~ "Arctocephalus australis",
+      species == "Oliva ozodona nitidula" ~ "Oliva ozodona",
+      TRUE ~ species
+    )
+  )
+```
+
+# NOT MERGED
+## SIMON 
+Checklists of endemic tracheophytes and bryophytes to the French Overseas Territories (Plants) INSTITUTION
+https://doi.org/10.5061/dryad.xpnvx0kfd
+```{r}
+# Checklist_tracheophytes_SIMON <- Checklist_tracheophytes_SIMON %>% 
+#   rename(Presence.in.PC = Presence.in.P) %>% 
+#   rename(Endemic.status = endemic.status) %>% 
+#   rename(Resasons.for.foubt = Reason.for.doubt) %>% 
+#   rename(Regional.Red.List = Regional.Red.List..Endemia..RLA.Flore.NC..2019..)
+  
+
+TBSIMON <- rbind(Checklist_tracheophytes_SIMON, Appendix_4_Checklist_bryophytes_October) %>% 
+  filter(FOT == "French Polynesia") %>% 
+  mutate(species = str_extract(Name, "^\\S+\\s+\\S+")) #recupere deux premiers mots
+```
+
+
+## COTE, Isabelle (2020). 
+Raw datafile of behavioural observations and fish surveys. figshare. Dataset. https://doi.org/10.6084/m9.figshare.12809864.v1
+RAW DIVE CHECKLIST NO GEOSPATIAL DATA
+```{r}
+COTEData2020 <- COTEData20202 %>% rename(`species` = `Scientific Name`)
+
+diff_COTE_vs_ref <- anti_join(COTEData2020, Filtered_data, by = c("species"))
+```
+
+
+## RAMAGE 2017
+Checklist of the terrestrial and freshwater arthropods of French Polynesia (Chelicerata; Myriapoda; Crustacea; Hexapoda) 
+https://doi.org/10.5252/z2017n2a3
+Island-level Geospatial data
+3025 species (according to paper), 2995 unique species (because subspecies smashed by species column creation), 2311 not present in dataset; 
+INSTITUTION
+```{r}
+Ramage2017TerrestrialArthropods <- zoosystema39_2_annexe1_checklist  %>% 
+  filter(!is.na(Species)) %>%
+  filter(!str_detect(Family, regex("Family", ignore_case = TRUE))) %>% 
+  mutate(across(c(Species), ~ str_remove_all(., "[[:punct:]]"))) %>% 
+  mutate(species = str_extract(Species, "^\\S+\\s+\\S+")) %>%
+  distinct(species, .keep_all = TRUE)
+
+diff_RAM_vs_ref <- anti_join(Ramage2017TerrestrialArthropods, Filtered_data, by = c("species"))
+
+#diff_RAM_vs_ori <- anti_join(Ramage2017TerrestrialArthropods, GBIFORIDATA, by = c("species" = "acceptedScientificName"))
+
+
+# on vérifie le format des espèces
+species_formats <- Ramage2017TerrestrialArthropods %>%
+  mutate(
+    original = species,
+    nb_words = str_count(species, "\\S+"),
+    format = case_when(
+      str_detect(species, "^\\S+\\s\\S+$") ~ "Deux mots",
+      str_detect(species, "^\\S+$") ~ "Un mot",
+      str_detect(species, "^\\S+\\s\\S+\\s\\S+$") ~ "Trois mots",
+      TRUE ~ "Autre"
+    ),
+    has_number = str_detect(species, "\\d"),
+    has_punct = str_detect(species, "[[:punct:]]"),
+    starts_with_cap = str_detect(species, "^[A-Z]"),
+    second_word_short = str_detect(species, "^\\S+\\s+\\S{1,2}(\\s|$)")
+  ) %>%
+  group_by(format, has_number, has_punct, starts_with_cap, second_word_short) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(desc(n))
+
+
+
+
+RAM_taxref <- 
+  purrr::map(liste_RAM2017, ~ rtaxref::rt_taxa_search(sciname = .x)[1,]) %>%
+  dplyr::bind_rows() %>%
+  dplyr::select(c("scientificName","habitat","pf")) %>% 
+  dplyr::rename("species" = "scientificName",
+                "habitat_taxref" = "habitat") %>%
+  dplyr::filter(!is.na(species)) %>%
+  dplyr::distinct()
+
+RAM_worms <- unique(Ramage2017TerrestrialArthropods$species) %>%
+  stats::na.omit() %>%
+  purrr::map(~ get_worms_records(.x)) %>%
+  dplyr::bind_rows()
+```
+### LEAFLET TEST VISU DATA
+```{r}
+library(leaflet)
+library(dplyr)
+
+# On suppose que les deux datasets ont été arrondis à 4 décimales pour bien matcher
+# et qu'ils ont une colonne "species"
+
+# Carte avec deux jeux de données en couleurs différentes
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(data = ORPData,
+                   lat = ~decimalLatitude,
+                   lng = ~decimalLongitude,
+                   popup = ~species,
+                   color = "blue",
+                   radius = 4,
+                   label = ~paste("ORP:", species),
+                   group = "ORPData") %>%
+  addCircleMarkers(data = Filtered_data,
+                   lat = ~decimalLatitude,
+                   lng = ~decimalLongitude,
+                   popup = ~species,
+                   color = "red",
+                   radius = 4,
+                   label = ~paste("GBIF:", species),
+                   group = "Filtered_data") %>%
+  addLayersControl(overlayGroups = c("ORPData", "Filtered_data"),
+                   options = layersControlOptions(collapsed = FALSE))
+
+```
+
+
+### Mess
+```{r}
+
+```
+

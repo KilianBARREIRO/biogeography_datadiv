@@ -1,0 +1,128 @@
+---
+title: "complementaryTests"
+author: "Kilian BARREIRO"
+date: "2025-04-22"
+output: html_document
+knit: FALSE
+---
+
+
+# *complementary_test n°1*
+To assess the reliability of the species field, we investigated whether its missing values (NA) could be compensated by information available in the scientificName and acceptedScientificName columns. Specifically, we tested whether a valid binomial format (Genus specificEpithet) with a single capitalized word was present in either of these fields when species was missing.
+Results indicate that entries with NA in the species field cannot generally be inferred from other taxonomic fields. Only a single record deviated from the expected format and may reflect a rare inconsistency.
+These NA values will be excluded during data cleaning to maintain consistency and avoid ad hoc handling within the main workflow (see code.Rmd for details).
+## code
+```{r}
+columns_to_compare <- c("day", "month", "year", "decimalLatitude", "decimalLongitude", "species")
+
+Filtered_data_ori_test_NAspecies <- filtered_data %>%
+  mutate(
+    species = str_replace(species, "^([\\w-]+) \\([^\\)]+\\) ([\\w-]+)$", "\\1 \\2"),
+    species = str_replace(species, "^((\\S+\\s+\\S+))\\s+.*$", "\\1"),
+    nb_words = str_count(species, "\\S+"),
+    format = case_when(
+      str_detect(species, "^\\S+\\s\\S+$") ~ "Deux mots",
+      str_detect(species, "^\\S+$") ~ "Un mot",
+      str_detect(species, "^\\S+\\s\\S+\\s\\S+$") ~ "Trois mots",
+      TRUE ~ "Autre"
+    ),
+    has_number = str_detect(species, "\\d"),
+    has_punct = str_detect(species, "[[:punct:]]"),
+    starts_with_cap = str_detect(species, "^[A-Z]"),
+    second_word_short = str_detect(species, "^\\S+\\s+\\S{1,2}(\\s|$)")
+  ) %>%
+  filter(
+    format != "Deux mots" |
+      has_number == TRUE |
+      has_punct == TRUE |
+      starts_with_cap == FALSE |
+      second_word_short == TRUE
+  )
+
+summarise_species_formats(filtered_species, "species")
+```
+
+On teste les species/scientificname/acceptedscientificname de GBIF car beaucoup de NA dans species, on veut récupérer les données species d'où on peut avec les colonnes sciName et ASciName, on en conclus que quand la colonne species est vide, les deux
+autres colonnes sont inutiles pour remplir les informations.
+```{r}
+
+
+filtered_data_NAspecies_or_difffrom2words <- filter_species_data(filtered_data, col_species = species) %>%
+  filter(
+    (!is.na(acceptedScientificName) & str_count(acceptedScientificName, "\\S+") > 1 & str_count(acceptedScientificName, "[A-Z]") == 1) &
+    (!is.na(scientificName) & str_count(scientificName, "\\S+") > 1 & str_count(scientificName, "[A-Z]") == 1))
+
+```
+
+## Output
+```{r}
+# detect_species_formats(filtered_data)
+```
+
+```{r, echo = FALSE, eval= FALSE}
+A tibble: 5 × 6
+format    has_number has_punct starts_with_cap second_word_short      n
+<chr>     <lgl>      <lgl>     <lgl>           <lgl>              <int>
+  1 Deux mots FALSE      FALSE     TRUE            FALSE             234162
+2 Autre     NA         NA        NA              NA                 63604
+3 Deux mots FALSE      TRUE      TRUE            FALSE                 20
+4 Deux mots FALSE      TRUE      TRUE            TRUE                   2
+5 Deux mots FALSE      FALSE     TRUE            TRUE                   1
+
+
+
+> filtered_suspicious_species$species
+[1] "Olla v-nigrum"            "Olla v-nigrum"            "Olla v-nigrum"
+[4] "Olla v-nigrum"            "Olla v-nigrum"            "Olla v-nigrum"
+[7] "Foa f."                   "Sulanyssus caput-medusae" "Foa f."
+[10] "Olla v-nigrum"            "Olla v-nigrum"            "Olla v-nigrum"
+[13] "Sulanyssus caput-medusae" "Sulanyssus caput-medusae" "Olla v-nigrum"
+[16] "Mecyclothorax aa"         "Olla v-nigrum"            "Olla v-nigrum"
+[19] "Olla v-nigrum"            "Olla v-nigrum"            "Olla v-nigrum"
+[22] "Elasmolomus v-album"      "Elasmolomus v-album"
+```
+
+
+
+# *complementary_test n°2*
+Minimal checks before merging:
+## code
+```{r}
+# Last checks :
+# table(is.na(Annexe_Data_Merged$species))
+# detect_species_formats(Annexe_Data_Merged, species_col = "species")
+# identical(names(Annexe_Data_Merged), names(filtered_data))
+# all(map2_chr(Annexe_Data_Merged, filtered_data, ~ class(.x)[1]) ==   map_chr(filtered_data, ~ class(.)[1]))
+```
+
+
+# *complementary_test n°3*
+```{r}
+off_format_species <- filtered_data %>%
+  mutate(
+    nb_words = str_count(species, "\\S+"),
+    format = case_when(
+      str_detect(species, "^\\S+\\s\\S+$") ~ "Deux mots",
+      str_detect(species, "^\\S+$") ~ "Un mot",
+      str_detect(species, "^\\S+\\s\\S+\\s\\S+$") ~ "Trois mots",
+      TRUE ~ "Autre"
+    ),
+    has_number = str_detect(species, "\\d"),
+    has_punct = str_detect(species, "[[:punct:]]"),
+    starts_with_cap = str_detect(species, "^[A-Z]"),
+    second_word_short = str_detect(species, "^\\S+\\s+\\S{1,2}(\\s|$)")
+  ) %>%
+  filter(
+    format != "Deux mots" |
+      has_number |
+      has_punct |
+      !starts_with_cap |
+      second_word_short
+  )
+
+# > table(off_format_species$species)
+# 
+# Elasmolomus v-album    Mecyclothorax aa       Olla v-nigrum 
+#                   2                   1                   8 
+```
+

@@ -1,4 +1,28 @@
+# Fichiers temporaires de RStudio
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+
+# Fichiers de données (trop lourds ou sensibles)
+Data/raw/
+Data/processed/
+Data/outputs/
+
+# Formats de fichiers qu'on ne veut pas versionner
+*.csv
+*.rds
+*.xlsx
+*.sav
+*.dbf
+
+# Rapports temporaires ou générés automatiquement
+*.html
+*.pdf
+*.docx
+
+# Autres caches
+*.log
+*.aux
+*.out
+*.toc

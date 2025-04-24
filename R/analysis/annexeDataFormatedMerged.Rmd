@@ -1,0 +1,357 @@
+---
+title: "Suivi_datasets"
+author: "Kilian BARREIRO"
+date: "2025-04-13"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+source("suivi_datasets_extra.R")
+```
+
+
+List of references
+```{r}
+updated_list_of_ref_biogeography_FP <- read_csv("~/Papers/French Polynesia Biodiversity Assessment/updated_list_of_ref_biogeography_FP.csv") %>% 
+  select(
+    Year, Title, Authors, Habitat, Source_type, Issue_Type, Data_merged,
+    Geospatial_data_available, Geospatial_level, Repository, Listed_by, Notes
+  ) %>% 
+  arrange(desc(Year))
+
+write_csv(updated_list_of_ref_biogeography_FP, "~/Papers/French Polynesia Biodiversity Assessment/updated_list_of_ref_biogeography_FP.csv")
+```
+
+
+
+## Expeditions
+```{r}
+# detect_date_formats(expeditionsMerged, col_name = "eventDate")
+# detect_species_formats(expeditionsMerged, species_col = "species")
+# identical(names(expeditionsMerged), names(filtered_data))
+# all(map2_chr(expeditionsMerged, filtered_data, ~ class(.x)[1]) ==   map_chr(filtered_data, ~ class(.)[1]))
+
+expeditionsMerged <- bind_rows(geodataset_BenthausExpedition, 
+                               geodataset_Musorstom9Expedition, 
+                               geodataset_TarasocExpedition, 
+                               geodataset_PakaihiTeMoanaExpedition, 
+                               geodataset_TuhaaPaeExpedition, 
+                               geodataset_Rapa2002Expedition) %>%
+# Dates
+  mutate(
+    eventDate_clean = str_trim(eventDate),
+    eventDate_start = str_extract(eventDate_clean, "^[^/]+"),
+    eventDate_start = str_replace_all(eventDate_start, "(\\d{4})-(\\d{1,2})-(\\d{1,2})", function(x) {
+      parts <- str_match(x, "(\\d{4})-(\\d{1,2})-(\\d{1,2})")[,2:4]
+      sprintf("%04d-%02d-%02d", as.integer(parts[1]), as.integer(parts[2]), as.integer(parts[3]))
+    }),
+    eventDate_converted = ymd(eventDate_start)
+  ) %>%
+  
+#Species
+  mutate(
+    species = paste(genus, specificEpithet, sep = " "),
+    nb_capital = str_count(species, "[A-Z]"),
+    has_digit = str_detect(species, "\\d"),
+    has_punct = str_detect(species, "[[:punct:]]")
+  ) %>%
+  
+  filter(
+    nb_capital == 1,               # Une majuscule au début
+    !has_digit,                    # Pas de chiffres
+    !has_punct                     # Pas de ponctuation
+  ) %>%
+
+  # Créer la colonne 'format' avant d'utiliser 'if_else'
+  mutate(format = case_when(
+    str_count(species, "\\S+") == 2 ~ "Deux mots",    # Si 2 mots
+    str_count(species, "\\S+") == 3 ~ "Trois mots",    # Si 3 mots
+    TRUE ~ "Autre"
+  )) %>%
+
+  # Appliquer le format pour conserver uniquement les espèces avec "Deux mots"
+  mutate(species = if_else(format == "Deux mots", species, NA_character_)) %>%
+
+  filter(!is.na(species),
+         !is.na(eventDate)) %>% 
+
+  mutate(
+    day = as.numeric(format(eventDate_converted, "%d")),
+    month = as.numeric(format(eventDate_converted, "%m")),
+    year = as.numeric(format(eventDate_converted, "%Y"))
+  ) %>%
+
+# GBIF Formating
+  mutate(gbifID = NA, publisher = paste(expedition, "(MNHN)"),
+         references = NA, basisOfRecord = "HUMAN_OBSERVATION",
+         individualCount = NA, occurrenceStatus = "PRESENT",
+         identificationRemarks = recordedBy, kingdom = "Animalia",
+         phylum = NA, subfamily = NA, genericName = NA, taxonomicStatus = NA,
+         publishingCountry = "FR", elevation = NA, depth = NA, issue = NA,
+         hasGeospatialIssues = NA, acceptedScientificName = scientificName,
+         protocol = NA, level1Name = locality, iucnRedListCategory = NA) %>% 
+  
+
+  select(all_of(colnames(filtered_data))) %>% 
+
+# Forcer les types des colonnes à ceux de filtered_data
+  mutate(across(
+    intersect(names(.), names(filtered_data)),
+    ~ {
+      target_class <- class(filtered_data[[cur_column()]])[1]
+      match.fun(paste0("as.", target_class))(.)
+    }
+  )) %>% 
+  
+  filter(decimalLatitude >= -30, 
+         decimalLatitude <= -5, decimalLongitude >= -155, 
+         decimalLongitude <= -134)
+
+
+# write.csv(expeditionsMerged, "ReadyToMerge_geodataset_EXPEDITIONS.csv", row.names = FALSE)
+```
+
+
+
+## FISHNET
+```{r}
+# To understand what has been done below for date formatting 
+# species formatting
+# detect_species_formats(BRANDL, species_col = "species")
+# table(guess_formats(BRANDL_1$Date, c("ymd", "dmy", "mdy", "ydm")))
+# columns order and format checking
+# identical(names(Data_Sp_Obs), names(Original_Data_Sp_Obs))
+# all(map2_chr(BRANDL, filtered_data, ~ class(.x)[1]) ==   map_chr(filtered_data, ~ class(.)[1]))
+FISHNET <- read_csv("~/Papers/French Polynesia Biodiversity Assessment/Datasets to check in my GBIF almost only inspired dataset/FISHNET/SearchResults-20250417053816.csv") %>% 
+  
+  mutate(decimalLatitude = Latitude, 
+    decimalLongitude = Longitude,
+    species = ScientificName,
+    year = YearCollected,
+    month = MonthCollected,
+    day = DayCollected) %>%
+  
+  filter(!is.na(decimalLatitude), !is.na(decimalLongitude), !is.na(species),
+         !str_detect(species, "[[:punct:]]"), str_count(species, "\\S+") >= 2,
+         str_count(species, "[A-Z]") < 2, decimalLatitude >= -30, 
+         decimalLatitude <= -5, decimalLongitude >= -155, decimalLongitude <= -134) %>%
+  # We extract the two first words 
+  mutate(species = str_replace(species, "^((\\S+)\\s+(\\S+)).*$", "\\1")) %>%
+  
+  mutate(
+    gbifID = NA, publisher = "Fishnet", references = NA, 
+    basisOfRecord = str_to_upper((str_replace_all(BasisOfRecord, "(?<=[a-z])(?=[A-Z])", "_"))),
+    individualCount = IndividualCount, occurrenceStatus = "PRESENT",
+    locality = Locality, identificationRemarks = Remarks, scientificName = species,
+    kingdom = "Animalia", phylum = NA, class = NA, order = NA, family = Family, 
+    subfamily = NA, genus = word(species, 1), genericName = NA,
+    specificEpithet = word(species, 2), taxonRank = "SPECIES",
+    taxonomicStatus = NA, publishingCountry = "FR", elevation = NA, 
+    depth = VerbatimDepth, issue = NA, hasGeospatialIssues = NA, 
+    acceptedScientificName = NA, protocol = PreparationType,
+    level1Name = Island, iucnRedListCategory = NA) %>%
+  
+  select(all_of(colnames(filtered_data))) %>% 
+  # Forcer les types des colonnes à ceux de Filtered_data_ori
+  mutate(across(
+    intersect(names(.), names(filtered_data)),
+    ~ {
+      target_class <- class(filtered_data[[cur_column()]])[1]
+      match.fun(paste0("as.", target_class))(.)
+    }
+  ))
+
+
+# write.csv(FISHNET, "ReadyToMerge_geodataset_FISHNET.csv", row.names = FALSE)
+
+```
+
+
+## ORP DATA SHARKS CLEMENTINE SEGUIGNE 2023  
+https://doi.org/10.5061/dryad.z08kprrhm
+5 espèces de requin manquantes et 31530 occurrences manquantes dans ma base de données. Citizen Science
+GEOSPATIAL DATA
+```{r}
+library(tidyverse)
+library(bit64)
+# #Date format 
+# formats_date_SEGUIGNE <- detect_date_formats(DataORP_obs_V3, col_name = "Date_observation")
+# #Species Format Testing
+# formats_esp_SEGUIGNE <- detect_species_formats(Data_Sp_Obs, species_col = "Species")
+
+DataORP_obs_V3 <-  read_delim("~/Papers/French Polynesia Biodiversity Assessment/Datasets to check in my GBIF almost only inspired dataset/DRYAD/Sharks SEGUIGNE/DataORP_obs_V3.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE) %>% 
+  mutate(Date_observation = as.Date(Date_observation, format = "%d/%m/%Y"),
+         day = as.numeric(format(Date_observation, "%d")),
+         month = as.numeric(Month),
+         year = as.numeric(format(Date_observation, "%Y")),
+         decimalLatitude = Lat,
+         decimalLongitude = Long) %>%
+  filter(decimalLatitude >= -30, decimalLatitude <= -5,
+    decimalLongitude >= -155, decimalLongitude <= -134) 
+
+Data_Sp_Obs <- read_delim("~/Papers/French Polynesia Biodiversity Assessment/Datasets to check in my GBIF almost only inspired dataset/DRYAD/Sharks SEGUIGNE/Data_Sp_Obs.csv", 
+    delim = ";", escape_double = FALSE, trim_ws = TRUE) %>% 
+  mutate(species = gsub("_", " ", Species),
+         genus = str_split(species, " ", simplify = TRUE)[, 1],
+         specificEpithet = str_split(species, " ", simplify = TRUE)[, 2]) %>%
+  select(ID_fiche, ID_nombre, species, genus, specificEpithet)
+
+ORPData <- left_join(DataORP_obs_V3, Data_Sp_Obs, by = "ID_fiche") %>%
+  
+  filter(!is.na(species)) %>% 
+  filter(species != "Squalus") %>% 
+  
+  mutate(species = case_when(
+    species %in% c("Dasyatis violacea","Raie violette") ~ "Pteroplatytrygon violacea",
+    species == "Himantura fai" ~ "Pateobatis fai",
+    species == "Requin Feroce" ~ "Odontaspis ferox",
+    species == "Taeniura meyeni" ~ "Taeniurops meyeni",
+    TRUE ~ species)) %>%
+  
+  mutate(
+    gbifID = NA, publisher = "Polynesian Shark Observatory (ORP)",
+    references = NA, basisOfRecord = "HUMAN_OBSERVATION", 
+    individualCount = ID_nombre, occurrenceStatus = "PRESENT",
+    locality = Name_Site, identificationRemarks = ID_observateur,
+    scientificName = species, kingdom = "Animalia", phylum = NA,
+    class = NA, order = NA, family = NA, subfamily = NA, genericName = NA,
+    taxonRank = "SPECIES", taxonomicStatus = NA, publishingCountry = "FR",
+    elevation = NA, depth = NA, issue = NA, hasGeospatialIssues = NA,
+    acceptedScientificName = NA, protocol = NA, level1Name = Name_Site,
+    iucnRedListCategory = NA
+  ) %>% 
+  
+  select(all_of(names(filtered_data))) %>% 
+#verification if columns formats are the same than filtered data
+  mutate(across(
+    intersect(names(.), names(filtered_data)),
+    ~ {
+      target_class <- class(filtered_data[[cur_column()]])[1]
+      match.fun(paste0("as.", target_class))(.)
+    }
+  ))
+
+
+#write.csv(ORPData, "ReadyToMerge_geodataset_SEGUIGNE_2020.csv", row.names = FALSE)
+```
+
+
+
+## BRANDL (2025) 
+A seascape dichotomy in the role of small consumers for coral reef energy fluxes
+https://doi.org/10.1002/ecy.70065 (papier)
+https://doi.org/10.6084/m9.figshare.28400828.v1 (Data)
+ insects, worms, mollusks, or small vertebrates
+ GEOSPATIAL DATA (CRIOBE), 
+BRANDL DATASET MERGED (0 new species, 778/778 new occurrences)
+```{r}
+# species formatting
+# detect_species_formats(BRANDL, species_col = "species")
+# To understand what has been done below for date formatting 
+# table(guess_formats(BRANDL_1$Date, c("ymd", "dmy", "mdy", "ydm")))
+# columns order and format checking
+# identical(names(Data_Sp_Obs), names(Original_Data_Sp_Obs))
+# all(map2_chr(BRANDL, filtered_data, ~ class(.x)[1]) ==   map_chr(BRANDL, ~ class(.)[1]))
+BRANDL_1 <- readr::read_csv("~/Papers/French Polynesia Biodiversity Assessment/Datasets to check in my GBIF almost only inspired dataset/FIGSHARE/BRANDL 2025/moorea_communities_allyears.csv") %>%
+  {list(
+    part1 = .[1:1938, ] %>% mutate(Date = mdy(Date)),
+    part2 = .[1939:nrow(.), ] %>% mutate(Date = dmy(Date))
+  )} %>%
+  {rbind(.$part1, .$part2)} %>%
+  mutate(
+    Date = as.Date(Date),
+    day = as.numeric(format(Date, "%d")),
+    month = as.numeric(format(Date, "%m")),
+    year = as.numeric(format(Date, "%Y")),
+    decimalLatitude = Lat, #round(Lat, 4),
+    decimalLongitude = Long #round(Long, 4)
+  ) %>%
+  mutate(Species = str_extract(Species, "^\\S+")) %>% #extrait premier mot
+  filter(!str_detect(Species, "[A-Z0-9]")) %>% #assure pas de Majuscule ou Chiffre
+  mutate(species = paste(Genus, Species, sep = " ")) 
+
+BRANDL_3 <- read_csv("~/Papers/French Polynesia Biodiversity Assessment/Datasets to check in my GBIF almost only inspired dataset/FIGSHARE/BRANDL 2025/crypto.sia.2019.csv") %>%
+  mutate(
+    Date = lubridate::dmy(Date),
+    day = as.numeric(format(Date, "%d")),
+    month = as.numeric(format(Date, "%m")),
+    year = as.numeric(format(Date, "%Y")),
+    decimalLatitude = Lat, #round(Lat, 4),
+    decimalLongitude = Long #round(Long, 4)
+  ) %>%
+  mutate(Species = str_extract(Species, "^\\S+")) %>% #extrait premier mot
+  filter(!str_detect(Species, "[A-Z0-9]")) %>% #assure pas de Majuscule ou Chiffre
+  mutate(species = paste(Genus, Species, sep = " "))
+
+# We compute what is in BRANDL_3 and not in BRANDL_1 to add it afterwards
+columns_to_compare = c("day", "month", "year", "decimalLatitude", "decimalLongitude", "species")
+
+diff_BRANDL3_vs_BRANDL1 <- anti_join(BRANDL_3, BRANDL_1, by = columns_to_compare) %>%
+  mutate(across(
+    intersect(names(.), names(BRANDL_1)),
+    ~ suppressWarnings(as(., class(BRANDL_1[[cur_column()]])))
+  )) %>% 
+  select(-all_of(setdiff(colnames(BRANDL_3), colnames(BRANDL_1)))) %>% 
+  select(all_of(colnames(BRANDL_1)))
+
+# We put the two datasets together prior to general formatting
+BRANDL <- bind_rows(BRANDL_1, diff_BRANDL3_vs_BRANDL1) %>% 
+  distinct() %>%  
+  mutate(
+    gbifID = NA, publisher = "Figshare (CRIOBE) Brandl et al. 2025",
+    references = NA, basisOfRecord = "HUMAN_OBSERVATION", 
+    individualCount = NA, occurrenceStatus = "PRESENT",
+    locality = Location, identificationRemarks = Full_ID, genus = Genus,
+    scientificName = species, kingdom = "Animalia", phylum = NA,
+    class = NA, order = NA, family = Family, subfamily = NA, genericName = NA,
+    specificEpithet = Species,
+    taxonRank = "SPECIES", taxonomicStatus = NA, publishingCountry = "FR",
+    elevation = NA, depth = Depth, issue = NA, hasGeospatialIssues = NA,
+    acceptedScientificName = NA, protocol = NA, level1Name = Habitat,
+    iucnRedListCategory = NA) %>% 
+  
+  select(all_of(colnames(filtered_data))) %>% 
+  filter(decimalLatitude >= -30, decimalLatitude <= -5,
+    decimalLongitude >= -155, decimalLongitude <= -134) %>% 
+  mutate(across(
+    intersect(names(.), names(filtered_data)),
+    ~ {
+      target_class <- class(filtered_data[[cur_column()]])[1]
+      match.fun(paste0("as.", target_class))(.)
+    }
+  ))
+  
+
+#write.csv(BRANDL, "ReadyToMerge_geodataset_BRANDL_2025.csv", row.names = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+WE MERGE EVERYTHING
+Each dataset below have been formatted to fit the filtered data col names
+```{r}
+# Last checks :
+# table(is.na(Annexe_Data_Merged$species))
+# detect_species_formats(Annexe_Data_Merged, species_col = "species")
+# identical(names(Annexe_Data_Merged), names(filtered_data))
+# all(map2_chr(Annexe_Data_Merged, filtered_data, ~ class(.x)[1]) ==   map_chr(filtered_data, ~ class(.)[1]))
+
+Annexe_Data_Merged <- bind_rows(FISHNET,
+                                BRANDL,
+                                expeditionsMerged,
+                                ORPData) 
+
+# write.csv(Annexe_Data_Merged, "Annexe_Merged_Geodataset.csv", row.names = FALSE)
+```

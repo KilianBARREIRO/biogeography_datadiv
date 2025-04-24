@@ -1,0 +1,795 @@
+---
+title: "Sampbias_test"
+author: "Kilian GRIHAULT BARREIRO"
+date: "2023-08-12"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(rlang)
+library(viridis)
+#installing the package
+# install.packages("devtools")
+# require("devtools")
+# devtools::install_github("azizka/sampbias")
+library(sampbias)
+library(sf)
+
+
+
+```
+
+```{r}
+atolls <- read.csv2("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/atolls.csv")
+```
+
+```{r}
+shp <- sf::st_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_pf/") %>% #Not on Github for the moment, its in the GEOGRAPHIE_DES_ATOLLS file in the Biogeography Kilian
+  sf::st_transform(crs = 4326) %>% 
+  sf::st_make_valid()  %>% 
+  dplyr::mutate(ILE = ifelse(OBJECTID %in% c(24733, 24734), "MOTU ONE (MAR)", ILE)) %>% #The shapefile does not distinct Motu One from Society and Marquesas archipelagos.
+  dplyr::left_join(atolls, by = join_by(ILE)) # To add Archipelagos
+
+```
+
+
+```{r}
+filtered_data <- read.csv("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/05_Filtered_data.csv")
+
+subset_marine <- filtered_data %>% dplyr::filter(habitat == "Marine") %>%
+  dplyr::select(decimalLongitude, decimalLatitude, species) %>%
+  na.omit()
+
+subset_terrestrial <- filtered_data %>% dplyr::filter(habitat == "Terrestrial") %>%
+  dplyr::select(decimalLatitude, decimalLongitude, species) %>%
+  na.omit()
+
+
+shp_pf_path_rivers <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Rivers"
+shp_pf_path_roads <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Roads"
+shp_pf_path_cities <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Cities"
+shp_pf_path_airports <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Airports"
+
+
+shp_pf_rivers <- terra::vect(shp_pf_path_rivers) 
+shp_pf_roads <- terra::vect(shp_pf_path_roads) 
+shp_pf_cities <- terra::vect(shp_pf_path_cities) %>%
+  terra::project(shp_pf_rivers) #to have the same crs
+shp_pf_airports <- terra::vect(shp_pf_path_airports)
+
+red_gaz <- list(
+  cities = shp_pf_cities,
+  roads = shp_pf_roads,
+  waterbodies = shp_pf_rivers,
+  airports = shp_pf_airports)
+
+input_raster <- terra::rast(xmin = -155, xmax = -134, ymin = -30, ymax = -5, res = 0.05)
+```
+
+# MARINE 
+## SAMPBIAS CALCULUS 
+```{r}
+sampling_bias_marine <- sampbias::calculate_bias(subset_marine, 
+                                                 gaz = red_gaz, 
+                                                 res = 0.05, 
+                                                 terrestrial = FALSE,
+                                                 inp_raster = input_raster)
+
+summary_marine <- summary(sampling_bias_marine)
+plot_marine <- plot(sampling_bias_marine)
+ggsave(plot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg", dpi = 1000, height = 10, width = 8)
+#
+project_marine <- sampbias::project_bias(sampling_bias_marine)
+map_marine_bias <- sampbias::map_bias(project_marine)
+# ggsave(map_marine_bias, file = "./Data/sampbias_marine_map.jpeg", dpi = 300, height = 10, width = 15)
+```
+
+# MARINE 
+## BOXPLOT
+```{r}
+variables_boxplot <- c("rivers", "cities", "ports_airports", "roads")
+colors <- viridis::viridis(length(variables_boxplot))
+names(colors) <- variables_boxplot
+
+samp_marine_boxplot_data <- sampling_bias_marine$bias_estimate %>% 
+  rename(rivers = w_waterbodies,
+         cities = w_cities,
+         ports_airports = w_airports,
+         roads = w_roads) %>% 
+  dplyr::select(c(6, 8, 7, 5)) %>% 
+  tidyr::gather(key = "variable", value = "value") %>%
+  mutate(variable = factor(variable, levels = c( "rivers","cities", "ports_airports", "roads")))
+  
+
+boxplot_marine <- ggplot(samp_marine_boxplot_data, aes(x = value, y = variable, color = variable, fill = variable)) +
+  geom_boxplot() +
+  scale_color_manual(values = colors) +
+  labs(y = "Biasing factor", x = "Posterior weight") + 
+  theme_bw() +
+  xlim(c(0, 0.07)) +  
+  scale_y_discrete(labels = c("Waterbodies", "Cities", "Ports \n Airports", "Roads")) +
+  theme(
+    legend.position = "none",          # Taille du titre
+    axis.title.x = element_text(size = 12),        # Taille du titre de l'axe X
+    axis.title.y = element_text(size = 12),        # Taille du titre de l'axe Y
+    axis.text.x = element_text(size = 10),         # Taille des étiquettes de l'axe X
+    axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
+  )
+
+ggsave(boxplot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
+```
+
+
+```{r}
+```
+
+# TERRESTRIAL 
+## SAMPBIAS CALCULUS
+```{r}
+sampling_bias_terrestrial <- sampbias::calculate_bias(subset_terrestrial, 
+                                                      gaz = red_gaz, 
+                                                      res = 0.05, 
+                                                      terrestrial = FALSE,
+                                                      inp_raster = input_raster)
+
+sum_ter <- summary(sampling_bias_terrestrial)
+plot_terrestrial <- plot(sampling_bias_terrestrial)
+ggsave(plot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg", dpi = 1000, height = 10, width = 8)
+
+
+project_terrestrial <- sampbias::project_bias(sampling_bias_terrestrial)
+map_terrestrial_bias <- sampbias::map_bias(project_terrestrial)
+
+```
+
+# TERRESTRIAL
+## BOXPLOT
+```{r}
+samp_terrestrial_boxplot_data <- sampling_bias_terrestrial$bias_estimate %>% 
+  rename(rivers = w_waterbodies,
+         cities = w_cities,
+         ports_airports = w_airports,
+         roads = w_roads) %>% 
+  dplyr::select(c(6, 8, 7, 5)) %>% 
+  tidyr::gather(key = "variable", value = "value") %>%
+  mutate(variable = factor(variable, levels = c( "rivers","cities", "ports_airports", "roads")))
+  
+boxplot_terrestrial <- ggplot(samp_terrestrial_boxplot_data, aes(x = value, y = variable, color = variable)) +
+  geom_boxplot() +
+  scale_color_manual(values = colors) +
+  labs(y = "Biasing factor", x = "Posterior weight") + 
+  theme_bw() +
+  xlim(c(0, 0.07)) +  
+  scale_y_discrete(labels = c("Waterbodies", "Cities", "Ports \n Airports", "Roads")) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 14),          # Taille du titre
+    axis.title.x = element_text(size = 12),        # Taille du titre de l'axe X
+    axis.title.y = element_text(size = 12),        # Taille du titre de l'axe Y
+    axis.text.x = element_text(size = 10),         # Taille des étiquettes de l'axe X
+    axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
+  )
+
+ggsave(boxplot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
+```
+
+
+```{r}
+library(magick)
+
+# Charger les images
+image1 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg")
+image2 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg")
+image3 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg")
+image4 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg")
+
+height <- 5000
+image3_width <- image_info(image3)$width
+image4_width <- image_info(image4)$width
+
+# Calculer le facteur de redimensionnement
+resize_factor3 <- height / image_info(image3)$height
+resize_factor4 <- height / image_info(image4)$height
+
+# Redimensionner en maintenant les proportions
+image3 <- image_resize(image3, paste0(image3_width * resize_factor3, "x", height))
+image4 <- image_resize(image4, paste0(image4_width * resize_factor4, "x", height))
+
+# Combiner les images par lignes
+row1 <- image_append(c(image1, image3)) %>% image_annotate("(a)", size = 350, color = "black", location = "+50+50") 
+row2 <- image_append(c(image2, image4)) %>% image_annotate("(b)", size = 350, color = "black", location = "+50+0")
+
+# Combiner les lignes en un carré 2x2
+combined_image <- image_append(c(row1, row2), stack = TRUE)
+
+image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.pdf",format = "pdf", density = 300)
+
+image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.jpeg", quality = 100)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## REAL DISTANCES POISSON MODEL FITTING
+```{r}
+
+samp_marine_distances_data <- cbind(dist_marine_df, occ_marine_df) %>% 
+  dplyr::filter(
+                cities != 0,
+                roads != 0,
+                waterbodies != 0,
+                airports != 0,
+                count >= 1)
+
+
+# Ajuster le modèle de Poisson pour chaque variable
+fit_poisson_waterbodies <- glm(count ~ waterbodies, data = samp_marine_distances_data, family = poisson)
+fit_poisson_cities <- glm(count ~ cities, data = samp_marine_distances_data, family = poisson)
+fit_poisson_ports_airports <- glm(count ~ airports, data = samp_marine_distances_data, family = poisson)
+fit_poisson_roads <- glm(count ~ roads, data = samp_marine_distances_data, family = poisson)
+
+x_vals_waterbodies <- seq(0, 1000, length.out = 1000)
+x_vals_cities <- seq(0, 1000, length.out = 1000)
+x_vals_ports_airports <- seq(0, 1000, length.out = 1000)
+x_vals_roads <- seq(0, 1000, length.out = 1000)
+
+
+# Prédictions pour chaque modèle
+pred_poisson_waterbodies <- predict(fit_poisson_waterbodies, newdata = data.frame(waterbodies = x_vals_waterbodies), type = "response")
+pred_poisson_cities <- predict(fit_poisson_cities, newdata = data.frame(cities = x_vals_cities), type = "response")
+pred_poisson_ports_airports <- predict(fit_poisson_ports_airports, newdata = data.frame(airports = x_vals_ports_airports), type = "response")
+pred_poisson_roads <- predict(fit_poisson_roads, newdata = data.frame(roads = x_vals_roads), type = "response")
+
+# Trouver la médiane des prédictions pour chaque modèle
+start_y <- 200
+
+# Ajuster les prédictions pour qu'elles commencent au même point en y
+adjust_pred <- function(pred, start_y) {
+  offset <- start_y - pred[1]
+  pred + offset
+}
+
+pred_poisson_waterbodies <- adjust_pred(pred_poisson_waterbodies, start_y)
+pred_poisson_cities <- adjust_pred(pred_poisson_cities, start_y)
+pred_poisson_ports_airports <- adjust_pred(pred_poisson_ports_airports, start_y)
+pred_poisson_roads <- adjust_pred(pred_poisson_roads, start_y)
+
+# Créer un data frame pour les prédictions ajustées
+pred_data <- data.frame(
+  x_vals = c(x_vals_waterbodies, x_vals_cities, x_vals_ports_airports, x_vals_roads),
+  pred = c(pred_poisson_waterbodies, pred_poisson_cities, pred_poisson_ports_airports, pred_poisson_roads),
+  variable = rep(c("waterbodies", "cities", "ports_airports", "roads"), each = 1000)
+)
+
+# Visualiser les ajustements avec ggplot2
+marine_dist_occ <- ggplot() +
+  geom_point(data = samp_marine_distances_data, aes(x = waterbodies, y = count), color = "#E41A1C") +
+  geom_line(data = pred_data %>% filter(variable == "waterbodies"), aes(x = x_vals, y = pred), color = "#E41A1C") +
+  geom_point(data = samp_marine_distances_data, aes(x = cities, y = count), color = "#377EB8") +
+  geom_line(data = pred_data %>% filter(variable == "cities"), aes(x = x_vals, y = pred), color = "#377EB8") +
+  geom_point(data = samp_marine_distances_data, aes(x = airports, y = count), color = "#4DAF4A") +
+  geom_line(data = pred_data %>% filter(variable == "ports_airports"), aes(x = x_vals, y = pred), color = "#4DAF4A") +
+  geom_point(data = samp_marine_distances_data, aes(x = roads, y = count), color = "#984EA3") +
+  geom_line(data = pred_data %>% filter(variable == "roads"), aes(x = x_vals, y = pred), color = "#984EA3") +
+  theme_minimal() +
+  labs(x = "Distance (km)", y = "Occurrences") +
+  coord_cartesian(xlim = c(0, 1000), ylim = c(0, start_y)) +
+  guides(color = guide_legend(title = "Poisson Models", ncol = 1))
+
+
+
+
+samp_terrestrial_distances_data <- cbind(dist_terrestrial_df, occ_terrestrial_df) %>% 
+  dplyr::filter(
+    # cities != 0,
+    #             roads != 0,
+    #             waterbodies != 0,
+    #             airports != 0,
+                count > 1)
+
+
+# Ajuster le modèle de Poisson pour chaque variable
+fit_poisson_waterbodies <- glm(count ~ waterbodies, data = samp_terrestrial_distances_data, family = poisson)
+fit_poisson_cities <- glm(count ~ cities, data = samp_terrestrial_distances_data, family = poisson)
+fit_poisson_ports_airports <- glm(count ~ airports, data = samp_terrestrial_distances_data, family = poisson)
+fit_poisson_roads <- glm(count ~ roads, data = samp_terrestrial_distances_data, family = poisson)
+
+# Prédictions pour chaque modèle
+pred_poisson_waterbodies <- predict(fit_poisson_waterbodies, newdata = data.frame(waterbodies = x_vals_waterbodies), type = "response")
+pred_poisson_cities <- predict(fit_poisson_cities, newdata = data.frame(cities = x_vals_cities), type = "response")
+pred_poisson_ports_airports <- predict(fit_poisson_ports_airports, newdata = data.frame(airports = x_vals_ports_airports), type = "response")
+pred_poisson_roads <- predict(fit_poisson_roads, newdata = data.frame(roads = x_vals_roads), type = "response")
+
+start_y <- 20
+
+# Ajuster les prédictions pour qu'elles commencent au même point en y
+adjust_pred <- function(pred, start_y) {
+  offset <- start_y - pred[1]
+  pred + offset
+}
+
+pred_poisson_waterbodies <- adjust_pred(pred_poisson_waterbodies, start_y)
+pred_poisson_cities <- adjust_pred(pred_poisson_cities, start_y)
+pred_poisson_ports_airports <- adjust_pred(pred_poisson_ports_airports, start_y)
+pred_poisson_roads <- adjust_pred(pred_poisson_roads, start_y)
+
+# Créer un data frame pour les prédictions ajustées
+pred_data <- data.frame(
+  x_vals = c(x_vals_waterbodies, x_vals_cities, x_vals_ports_airports, x_vals_roads),
+  pred = c(pred_poisson_waterbodies, pred_poisson_cities, pred_poisson_ports_airports, pred_poisson_roads),
+  variable = rep(c("waterbodies", "cities", "ports_airports", "roads"), each = 1000)
+)
+
+# Visualiser les ajustements avec ggplot2
+terrestrial_dist_occ <- ggplot() +
+  geom_point(data = samp_terrestrial_distances_data, aes(x = waterbodies, y = count), color = "#E41A1C") +
+  geom_line(data = pred_data %>% filter(variable == "waterbodies"), aes(x = x_vals, y = pred), color = "#E41A1C") +
+  geom_point(data = samp_terrestrial_distances_data, aes(x = cities, y = count), color = "#377EB8") +
+  geom_line(data = pred_data %>% filter(variable == "cities"), aes(x = x_vals, y = pred), color = "#377EB8") +
+  geom_point(data = samp_terrestrial_distances_data, aes(x = airports, y = count), color = "#4DAF4A") +
+  geom_line(data = pred_data %>% filter(variable == "ports_airports"), aes(x = x_vals, y = pred), color = "#4DAF4A") +
+  geom_point(data = samp_terrestrial_distances_data, aes(x = roads, y = count), color = "#984EA3") +
+  geom_line(data = pred_data %>% filter(variable == "roads"), aes(x = x_vals, y = pred), color = "#984EA3") +
+  theme_minimal() +
+  labs(x = "Distance (km)", y = "Occurrences") +
+  coord_cartesian(xlim = c(0, 1000), ylim = c(0, 55)) +
+  guides(color = guide_legend(title = "Poisson Models", ncol = 1))
+ 
+ 
+```
+
+## EXPECTED OCCURRENCES FIT
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+marine_expected_occurrences_all_bias <- marine_expected_occurrences %>% 
+  filter(split == "roads+airports+cities+waterbodies")
+
+# Filtre des données sans valeurs nulles ou négatives pour les variables explicatives
+figure_mar_exp_dist_rast_data <- cbind(marine_expected_occurrences_all_bias, dist_marine_df) %>% 
+  dplyr::filter(
+    # cities > 0,
+    #             roads > 0,
+    #             waterbodies > 0,
+    #             airports > 0,
+                val > 1)
+```
+
+
+```{r}
+# Define the color palette
+variables <- c("Roads", "Cities", "Ports and Airports", "Waterbodies")
+colors <- viridis::viridis(length(variables))
+names(colors) <- variables
+
+# Calculer l'offset pour faire démarrer les courbes à y = 100
+offset <- 100
+
+# Ajuster les valeurs de départ pour chaque variable
+figure_mar_exp_dist_rast_data$val <- figure_mar_exp_dist_rast_data$val + (offset - min(figure_mar_exp_dist_rast_data$val))
+
+# Régression non linéaire pour chaque variable
+fit_exponential_waterbodies <- nls(val ~ a * exp(b * waterbodies), data = figure_mar_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_cities <- nls(val ~ a * exp(b * cities), data = figure_mar_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_ports_airports <- nls(val ~ a * exp(b * airports), data = figure_mar_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_roads <- nls(val ~ a * exp(b * roads), data = figure_mar_exp_dist_rast_data, start = list(a = 1, b = 0))
+
+# Prédire les valeurs ajustées
+pred_data_waterbodies <- data.frame(waterbodies = seq(0, 1000, length.out = 1000))
+pred_data_cities <- data.frame(cities = seq(0, 1000, length.out = 1000))
+pred_data_ports_airports <- data.frame(airports = seq(0, 1000, length.out = 1000))
+pred_data_roads <- data.frame(roads = seq(0, 1000, length.out = 1000))
+
+pred_data_waterbodies$val <- predict(fit_exponential_waterbodies, newdata = pred_data_waterbodies) + 23
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_cities$val <- predict(fit_exponential_cities, newdata = pred_data_cities) + 21
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_ports_airports$val <- predict(fit_exponential_ports_airports, newdata = pred_data_ports_airports) + 2
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_roads$val <- predict(fit_exponential_roads, newdata = pred_data_roads) 
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+
+# Tracer les données et les courbes ajustées
+marine_expected_plot <- ggplot(figure_mar_exp_dist_rast_data, aes(color = "Data")) +
+    geom_line(data = pred_data_waterbodies, aes(x = waterbodies, y = val, color = "Waterbodies"), linetype = "solid", size = 1.5) +
+    geom_line(data = pred_data_cities, aes(x = cities, y = val, color = "Cities"), linetype = "dotted", size = 2) +
+    geom_line(data = pred_data_ports_airports, aes(x = airports, y = val, color = "Ports and Airports"), linetype = "solid", size = 1.5) +
+    geom_line(data = pred_data_roads, aes(x = roads, y = val, color = "Roads"), linetype = "solid", size = 1.5) +
+    labs(x = "Distance (km)", y = "Sampling rate", color = "Feature") +
+    theme_minimal() +
+    ylim(c(0,150)) +
+    scale_color_manual(name = "", values = colors) + theme(legend.position = "bottom")
+
+print(marine_expected_plot)
+
+```
+
+
+
+```{r}
+terrestrial_expected_occurrences_all_bias <- terrestrial_expected_occurrences %>% 
+  filter(split == "roads+airports+cities+waterbodies")
+
+figure_terr_exp_dist_rast_data <- cbind(terrestrial_expected_occurrences_all_bias, dist_terrestrial_df) %>% 
+  dplyr::filter(cities > 0,
+                roads > 0,
+                waterbodies > 0,
+                airports > 0,
+                val > 1)
+
+
+
+# Calculer l'offset pour faire démarrer les courbes à y = 100
+offset <- 100
+
+# Ajuster les valeurs de départ pour chaque variable
+figure_terr_exp_dist_rast_data$val <- figure_terr_exp_dist_rast_data$val + (offset - min(figure_terr_exp_dist_rast_data$val))
+
+# Régression non linéaire pour chaque variable
+fit_exponential_waterbodies <- nls(val ~ a * exp(b * waterbodies), data = figure_terr_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_cities <- nls(val ~ a * exp(b * cities), data = figure_terr_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_ports_airports <- nls(val ~ a * exp(b * airports), data = figure_terr_exp_dist_rast_data, start = list(a = 1, b = 0))
+fit_exponential_roads <- nls(val ~ a * exp(b * roads), data = figure_terr_exp_dist_rast_data, start = list(a = 1, b = 0))
+
+# Prédire les valeurs ajustées
+pred_data_waterbodies <- data.frame(waterbodies = seq(0, 1000, length.out = 1000))
+pred_data_cities <- data.frame(cities = seq(0, 1000, length.out = 1000))
+pred_data_ports_airports <- data.frame(airports = seq(0, 1000, length.out = 1000))
+pred_data_roads <- data.frame(roads = seq(0, 1000, length.out = 1000))
+
+pred_data_waterbodies$val <- predict(fit_exponential_waterbodies, newdata = pred_data_waterbodies) + 5.5
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_cities$val <- predict(fit_exponential_cities, newdata = pred_data_cities) + 5
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_ports_airports$val <- predict(fit_exponential_ports_airports, newdata = pred_data_ports_airports) + 1
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+pred_data_roads$val <- predict(fit_exponential_roads, newdata = pred_data_roads) 
+#+ (offset - min(figure_mar_exp_dist_rast_data$val))
+
+# Tracer les données et les courbes ajustées
+terrestrial_expected_plot <- ggplot(figure_terr_exp_dist_rast_data, aes(color = "Data")) +
+    geom_line(data = pred_data_waterbodies, aes(x = waterbodies, y = val, color = "Waterbodies"), linetype = "solid", size = 1.5) +
+    geom_line(data = pred_data_cities, aes(x = cities, y = val, color = "Cities"), linetype = "dotted", size = 2) +
+    geom_line(data = pred_data_ports_airports, aes(x = airports, y = val, color = "Ports and Airports"), linetype = "solid", size = 1.5) +
+    geom_line(data = pred_data_roads, aes(x = roads, y = val, color = "Roads"), linetype = "solid", size = 1.5) +
+    labs(x = "Distance (km)", y = "Sampling rate", color = "Feature") +
+    theme_minimal() +
+    ylim(c(0,150)) +
+    scale_color_manual(name = "", values = colors)
+
+
+print(terrestrial_expected_plot)
+```
+
+```{r}
+p1 <- boxplot_marine + ylab(NULL)
+p2 <- boxplot_terrestrial + ylab(NULL)
+p3 <- plot_marine 
+p4 <- plot_terrestrial + ylab(NULL)
+
+# arrange the three plots in a single row
+prow <- cowplot::plot_grid(
+  p1 + theme(legend.position="none"),
+  p2 + theme(legend.position="none"),
+  p3 + theme(legend.position="none"),
+  p4 + theme(legend.position="none"),
+  align = 'vh',
+  labels = c("A", "", "B", ""),
+  hjust = -1,
+  nrow = 2
+)
+prow
+
+legend = cowplot::get_plot_component(marine_expected_plot, 'guide-box-bottom', return_all = TRUE)
+cowplot::ggdraw(legend)
+
+p <- cowplot::plot_grid(prow, legend, ncol = 1, rel_heights = c(1,0.1))
+p
+
+ggsave("Data/figure_sampbias.jpeg", p, dpi = 600)
+```
+
+
+
+```{r}
+Distance_RealOccurrences_MarTerComparison <- boxplot_marine + boxplot_terrestrial + marine_expected_plot + terrestrial_expected_plot + patchwork::plot_layout(nrow = 2, guides = "collect") & theme(legend.position = "bottom")
+```
+
+
+
+
+we can do the difference between what have been already done and the expected (per cell)
+```{r}
+diff_marine_occ <- cbind(marine_expected_occurrences_all_bias, occ_marine_df)
+
+diff_marine_occ <- diff_marine_occ %>% 
+  mutate(diff = val - count) %>% 
+  filter(diff < -1 | diff > 1) 
+
+input_raster$diff <- diff_marine_occ$diff
+input_raster$logdiff <- log10(diff_marine_occ$diff)
+
+terra::plot(input_raster$diff, xlim = c(-150, -149), ylim = c(-18,-17.2))
+terra::plot(shp, color = "black", add = TRUE)
+```
+```{r}
+diff_terr_occ <- cbind(terrestrial_expected_occurrences_all_bias, occ_terrestrial_df)
+
+diff_terr_occ <- diff_terr_occ %>% 
+  mutate(diff = val - count) %>% 
+  filter(diff < -1 | diff > 1) 
+
+input_raster_ter <- input_raster
+input_raster_ter$diff <- diff_terr_occ$diff
+input_raster_ter$logdiff <- log10(diff_terr_occ$diff)
+
+
+terra::plot(input_raster_ter$diff) #, xlim = c(-145, -141), ylim = c(-18,-16)
+terra::plot(shp, color = "black", add = TRUE, alpha = 0.4)
+```
+
+
+
+# Approche par pixels pour associer à chaque centroide d'ile son pixel associé selon la matrice de calcul de sampbias
+
+test combined
+```{r}
+centroides <- shp %>%
+  group_by(ILE) %>%
+  summarise(geometry = st_union(geometry)) %>%
+  mutate(geometry = st_make_valid(geometry),  # Assurez-vous que la géométrie est valide
+         geometry = st_buffer(geometry, 0)) %>%  # Correction des anomalies géométriques
+  ungroup() %>%
+  mutate(centroid = st_centroid(geometry)) 
+
+centroid_coordinates <- st_coordinates(centroides$centroid) %>% 
+  as.data.frame() %>% 
+  cbind(centroides$ILE) %>% 
+  dplyr::rename(ILE = `centroides$ILE`)
+
+#write.csv(centroid_coordinates, file = "Data/centroids_coordinates.csv")
+```
+
+
+```{r}
+#centroid_coordinates <- read.csv("~/GitHub/Biogeography_datadiv/Data/centroids_coordinates.csv")
+min_latitude <- -30  
+max_latitude <- -5 
+min_longitude <- -155
+max_longitude <- -134
+nrows = 500
+ncols = 420
+res = 0.05
+
+# Fonction pour obtenir les pixels et les buffers
+get_pixels_and_buffers <- function(x, y, input_raster, buffer_size) {
+  cell <- terra::cellFromXY(input_raster, cbind(x, y))
+  buffer_extent <- terra::ext(x - buffer_size * res, x + buffer_size * res, y - buffer_size * res, y + buffer_size * res)
+  buffer_cells <- terra::cells(input_raster, buffer_extent)
+  list(cell = cell, buffer_cells = buffer_cells)
+}
+
+# Appliquer la fonction à chaque centride
+buffer_size <- 3
+results <- lapply(1:nrow(centroid_coordinates), function(i) {
+  get_pixels_and_buffers(centroid_coordinates$X[i], centroid_coordinates$Y[i], input_raster, buffer_size)
+})
+
+# Extraire les numéros de pixels et les buffers
+numeros_pixels <- sapply(results, function(x) x$cell)
+numeros_pixels_buffer <- lapply(results, function(x) x$buffer_cells)
+
+# # Créer un raster de visualisation
+# vis_raster <- input_raster
+# terra::values(vis_raster) <- 0
+# terra::values(vis_raster)[unlist(numeros_pixels_buffer)] <- 1
+# terra::values(vis_raster)[numeros_pixels] <- 2
+# 
+# # Afficher le raster avec les cellules et les buffers
+# terra::plot(vis_raster, col = c("black", "yellow", "red"), legend = FALSE)
+# terra::plot(shp, add = TRUE)
+# terra::points(centroid_coordinates$X, centroid_coordinates$Y, col = "blue", pch = 20)
+```
+
+
+Now that we have the pixels we want after the buffer of pixels, we can 
+```{r}
+# Sampling_rate <- read.csv2("C:/Users/kgrihaul/Desktop/Biogeography Kilian/Plots_Analyse/sampling bias/Marinesampbias/Marine_samplingrate.csv")
+# Sampling_rate <- read.csv2("C:/Users/kgrihaul/Desktop/Biogeography Kilian/Plots_Analyse/sampling bias/Terrestrialsampbias/Terrestrial_samplingrate.csv")
+# Sampling_rate <- read.csv2("C:/Users/kgrihaul/Desktop/Biogeography Kilian/Plots_Analyse/sampling bias/Others_samplingrate.csv")
+
+marine_expected_occurrences_all_bias <- marine_expected_occurrences %>% 
+  filter(split == "roads+airports+cities+waterbodies") %>% 
+  dplyr::mutate(X = 1:210000) %>%
+  dplyr::rename(marine_value = val) %>% 
+  dplyr::select(X, marine_value)
+                  
+terrestrial_expected_occurrences_all_bias <- terrestrial_expected_occurrences %>% 
+  filter(split == "roads+airports+cities+waterbodies") %>% 
+  dplyr::mutate(X = 1:210000) %>%
+  dplyr::rename(terrestrial_value = val) %>% 
+  dplyr::select(X, terrestrial_value)
+```
+
+
+```{r}
+#numeros_pixels_buffer <- terra::readRDS(file = file.choose())
+
+# Créer un data frame vide pour stocker les noms d'îles et le nombre d'occurrences attendus
+resultats_marine <- data.frame(ile = character(0), moyenne_taux_marine = numeric(0))
+resultats_terrestrial <- data.frame(ile = character(0), moyenne_taux_terrestrial = numeric(0))
+
+
+for (i in seq_along(numeros_pixels_buffer)) {
+    # Extract the pixel numbers for the island
+    numeros_pixels <- numeros_pixels_buffer[[i]]
+    
+    # Filter the marine_expected_occurrences_all_bias data for the corresponding pixel numbers
+    marine_occurrences <- marine_expected_occurrences_all_bias[marine_expected_occurrences_all_bias$X %in% numeros_pixels,]
+    
+    # Calculate the average marine occurrence rate for the island
+    moyenne_taux_marine <- sum(marine_occurrences$marine_value)
+    print(moyenne_taux_marine)
+    
+    # Filter the terrestrial_expected_occurrences_all_bias data for the corresponding pixel numbers
+    terrestrial_occurrences <- terrestrial_expected_occurrences_all_bias[terrestrial_expected_occurrences_all_bias$X %in% numeros_pixels,]
+    
+    # Calculate the average terrestrial occurrence rate for the island
+    moyenne_taux_terrestrial <- sum(terrestrial_occurrences$terrestrial_value)
+    
+    # Get the name of the island
+    ile_name <- centroid_coordinates$ILE[i]
+    
+    # Create a new row with island name and average rates
+    nouvelle_ligne_marine <- data.frame(ILE = ile_name, moyenne_taux_marine = moyenne_taux_marine)
+    nouvelle_ligne_terrestrial <- data.frame(ILE = ile_name, moyenne_taux_terrestrial = moyenne_taux_terrestrial)
+    
+    # Add the new rows to the results data frames
+    resultats_marine <- rbind(resultats_marine, nouvelle_ligne_marine)
+    resultats_terrestrial <- rbind(resultats_terrestrial, nouvelle_ligne_terrestrial)
+}
+
+```
+
+FAIRE PAREIL AVEC NOS OCCURRENCES REELLES PAR ILES ET COMPARER LES DEUX PAR ILE,
+EXPLIQUER AUSSI POURQUOI ON A CHOISI LE BUFFER 3.
+
+
+```{r}
+
+
+```
+
+
+ANOVA
+```{r}
+library(stats)
+library(agricolae)
+
+resultat_1$Groupe <- "1"
+resultat_2$Groupe <- "2"
+resultat_3$Groupe <- "3"
+resultat_4$Groupe <- "4"
+resultat_5$Groupe <- "5"
+
+data_anova <- rbind(resultat_1, resultat_2, resultat_3, resultat_4, resultat_5)
+
+result_anova <- aov(moyenne_taux ~ Groupe, data = data_anova)
+summary(result_anova)
+
+posthoc <- TukeyHSD(result_anova)
+posthoc
+plot(posthoc)
+# dev.copy(png, "C:/Users/kgrihaul/Desktop/Biogeography Kilian/Plots_Analyse/sampling bias/tukey_test_terrestrial.jpeg")
+# dev.off()
+
+
+
+group_names <- unique(data_anova$Groupe)
+
+p_values <- posthoc$Groupe[, "p adj"]
+p_value_matrix <- matrix(NA, nrow = length(group_names), ncol = length(group_names))
+
+for (i in 1:length(group_names)) {
+  for (j in 1:length(group_names)) {
+    if (i != j) {
+      p_value <- p_values[paste(group_names[i], group_names[j], sep = "-")]
+      p_value_matrix[i, j] <- p_value
+      p_value_matrix[j, i] <- p_value
+    }
+  }
+}
+
+print(p_value_matrix)
+
+print(which.max(rowSums(p_value_matrix, na.rm=TRUE)))
+cat("The group", which.max(rowSums(p_value_matrix, na.rm=TRUE)), "has the greatest p-value across all groups which justifies to take a buffer of", which.max(rowSums(p_value_matrix, na.rm=TRUE)), "pixels. \n Detailled values for each group : ", rowSums(p_value_matrix, na.rm=TRUE))
+```
+
+
+
+
+
+
+
+
+
+
+
+
