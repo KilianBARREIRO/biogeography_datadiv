@@ -15,17 +15,19 @@ library(viridis)
 # devtools::install_github("azizka/sampbias")
 library(sampbias)
 library(sf)
-
+library(here)
+library(tidyverse)
 
 
 ```
 
 ```{r}
-atolls <- read.csv2("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/atolls.csv")
+atolls_file_address <- here("data/external", "atolls.csv") 
+atolls <- read.csv2(atolls_file_address)
 ```
 
 ```{r}
-shp <- sf::st_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_pf/") %>% #Not on Github for the moment, its in the GEOGRAPHIE_DES_ATOLLS file in the Biogeography Kilian
+shp <- sf::st_read(here("data/external", "shp_pf")) %>% #Not on Github for the moment, its in the GEOGRAPHIE_DES_ATOLLS file in the Biogeography Kilian
   sf::st_transform(crs = 4326) %>% 
   sf::st_make_valid()  %>% 
   dplyr::mutate(ILE = ifelse(OBJECTID %in% c(24733, 24734), "MOTU ONE (MAR)", ILE)) %>% #The shapefile does not distinct Motu One from Society and Marquesas archipelagos.
@@ -35,7 +37,7 @@ shp <- sf::st_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other
 
 
 ```{r}
-filtered_data <- read.csv("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/05_Filtered_data.csv")
+filtered_data <- read_csv2(here("data/processed", "05_Filtered_data.csv"))
 
 subset_marine <- filtered_data %>% dplyr::filter(habitat == "Marine") %>%
   dplyr::select(decimalLongitude, decimalLatitude, species) %>%
@@ -46,10 +48,10 @@ subset_terrestrial <- filtered_data %>% dplyr::filter(habitat == "Terrestrial") 
   na.omit()
 
 
-shp_pf_path_rivers <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Rivers"
-shp_pf_path_roads <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Roads"
-shp_pf_path_cities <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Cities"
-shp_pf_path_airports <- "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/shp_sampbias/Airports"
+shp_pf_path_rivers <- here("data/external", "shp_sampbias/Rivers")
+shp_pf_path_roads <- here("data/external", "shp_sampbias/Roads")
+shp_pf_path_cities <- here("data/external", "shp_sampbias/Cities")
+shp_pf_path_airports <- here("data/external", "shp_sampbias/Airports")
 
 
 shp_pf_rivers <- terra::vect(shp_pf_path_rivers) 
@@ -78,7 +80,7 @@ sampling_bias_marine <- sampbias::calculate_bias(subset_marine,
 
 summary_marine <- summary(sampling_bias_marine)
 plot_marine <- plot(sampling_bias_marine)
-ggsave(plot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg", dpi = 1000, height = 10, width = 8)
+ggsave(plot_marine, file = here("outputs/sampbias", "sampbias_marine_updated.pdf"), dpi = 1000, height = 10, width = 8)
 #
 project_marine <- sampbias::project_bias(sampling_bias_marine)
 map_marine_bias <- sampbias::map_bias(project_marine)
@@ -117,12 +119,9 @@ boxplot_marine <- ggplot(samp_marine_boxplot_data, aes(x = value, y = variable, 
     axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
   )
 
-ggsave(boxplot_marine, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
+ggsave(boxplot_marine, file = here("outputs/sampbias", "boxplot_marine_sampbias.pdf"), dpi = 1000, height = 5, width = 8)
 ```
 
-
-```{r}
-```
 
 # TERRESTRIAL 
 ## SAMPBIAS CALCULUS
@@ -135,7 +134,7 @@ sampling_bias_terrestrial <- sampbias::calculate_bias(subset_terrestrial,
 
 sum_ter <- summary(sampling_bias_terrestrial)
 plot_terrestrial <- plot(sampling_bias_terrestrial)
-ggsave(plot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg", dpi = 1000, height = 10, width = 8)
+ggsave(plot_terrestrial, file = here("outputs/sampbias", "sampbias_terrestrial_updated.pdf"), dpi = 1000, height = 10, width = 8)
 
 
 project_terrestrial <- sampbias::project_bias(sampling_bias_terrestrial)
@@ -171,18 +170,20 @@ boxplot_terrestrial <- ggplot(samp_terrestrial_boxplot_data, aes(x = value, y = 
     axis.text.y = element_text(size = 10)          # Taille des étiquettes de l'axe Y
   )
 
-ggsave(boxplot_terrestrial, file = "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg", dpi = 1000, height = 5, width = 8)
+ggsave(boxplot_terrestrial, file = here("outputs/sampbias", "boxplot_terrestrial_sampbias.pdf"), dpi = 1000, height = 5, width = 8)
 ```
 
 
 ```{r}
 library(magick)
 
+
 # Charger les images
-image1 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_marine_sampbias.jpeg")
-image2 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/boxplot_terrestrial_sampbias.jpeg")
-image3 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_marine.jpeg")
-image4 <- image_read("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sampbias_terrestrial.jpeg")
+image1 <- image_read(here("outputs/sampbias/boxplot_marine_sampbias.jpeg"))
+image2 <- image_read(here("outputs/sampbias/boxplot_terrestrial_sampbias.jpeg"))
+image3 <- image_read(here("outputs/sampbias/sampbias_marine_updated.jpeg")) %>% 
+  image_crop(geometry = "8000x4400+0+5000")
+image4 <- image_read(here("outputs/sampbias/sampbias_terrestrial_updated.jpeg")) %>% image_crop(geometry = "8000x4400+0+5000")
 
 height <- 5000
 image3_width <- image_info(image3)$width
@@ -203,11 +204,10 @@ row2 <- image_append(c(image2, image4)) %>% image_annotate("(b)", size = 350, co
 # Combiner les lignes en un carré 2x2
 combined_image <- image_append(c(row1, row2), stack = TRUE)
 
-image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.pdf",format = "pdf", density = 300)
+image_write(combined_image, here("outputs/sampbias/figure6_merged.pdf"),format = "pdf", density = 300, quality = 100)
 
-image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.jpeg", quality = 100)
+# image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.jpeg", quality = 100)
 ```
-
 
 
 

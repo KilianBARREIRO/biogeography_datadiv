@@ -11,7 +11,8 @@ output:
 # remotes::install_github("Rekyt/rtaxref")
 # remotes::install_github(c("ropensci/taxize","ropensci/bold"))
 # install.packages(c("rgbif","worrms"))
-
+# install.packages("here")
+library(here)
 library(tidyverse)
 library(devtools)
 library(rtaxref)
@@ -24,10 +25,8 @@ library(rgbif)
 
 Tip: `rgbif::occ_download` can also be used but very time consuming.
 ```{r file}
-install.packages("here")
-library(here)
-file_address <- here("Data/raw", "00_Raw_data.txt")
-file_address_annexe <- here("Data/processed" , "Annexe_Merged_Geodataset.csv")
+file_address <- here("data/raw", "00_Raw_data.txt")
+file_address_annexe <- here("data/processed" , "00_Annexe_merged_data.csv")
 ```
 
 ```{r Data import}
@@ -78,9 +77,9 @@ Worms_filtered_df <- purrr::map(scientificName_list, ~ get_worms_records(.x)[1,]
   dplyr::bind_rows() 
 ```
 
-To avoid the computation I wrote csv files for the next 4 comparisons.
+To avoid computational redundancy I wrote csv files for the next 4 comparisons.
 ```{r}
-Worms_filtered_df <- read.csv(file.path("..", "Data", "01_Worms_Filtered_df.csv")) 
+Worms_filtered_df <- read_csv(here("data/processed", "01_Worms_Filtered_df.csv")) 
 ```
 
 We keep specific columns from the data we have obtained after the WoRMS
@@ -141,15 +140,16 @@ Taxize_filtered_df <- purrr::map(unmatched_taxa[[1]], ~ taxize::gna_verifier(.x)
     TRUE ~ submittedName),
     data_source_title = dataSourceTitleShort) %>%
   dplyr::select(species, data_source_title)
-
-# write.csv(Taxize_filtered_df, "02_Taxize_filtered_df_updated.csv", row.names = FALSE)
 ```
 
 
+```{r}
+# write.csv(Taxize_filtered_df, "02_Taxize_filtered_df_updated.csv", row.names = FALSE)
+Taxize_filtered_df <- read_csv(here("data/processed", "02_Taxize_filtered_df.csv"))
+```
+
 #### Merge with original data (2/5)
 ```{r}
-Taxize_filtered_df <- read.csv(file.path("..", "Data/processed", "02_Taxize_filtered_df.csv"))
-
 filtered_data <- dplyr::left_join(filtered_data, Taxize_filtered_df, by = "species") %>%
   dplyr::mutate(
     data_source_title = dplyr::coalesce(data_source_title.x, data_source_title.y)
@@ -173,7 +173,7 @@ Taxref_filtered_df <-
 ```
 
 ```{r}
-Taxref_filtered_df <- read.csv(file.path("..", "Data", "03_Taxref_filtered_df.csv"))
+Taxref_filtered_df <- read_csv(here("data/processed", "03_Taxref_filtered_df.csv"))
 ```
 
 #### Merge with original data (3/5)
@@ -193,7 +193,7 @@ filtered_data <- dplyr::left_join(filtered_data, Taxref_filtered_df, by = "speci
 
 ### Handmade check
 ```{r}
-Handmade_filtered_df <- read.csv(file.path("..", "Data/processed", "04_Handmade_filtered_df.csv")) %>%
+Handmade_filtered_df <- read_csv(here("data/processed", "04_Handmade_filtered_df.csv")) %>%
   dplyr::rename("data_source_title" = "V2")
 ```
 
@@ -243,7 +243,7 @@ filtered_data <- filtered_data %>%
 
 ## Island and archipelagos
 ```{r}
-shp_file_path <- file.path("..", "Data/external", "shp_pf")
+shp_file_path <- here("data/external", "shp_pf")
 ```
 
 ```{r}
@@ -383,6 +383,11 @@ filtered_data <- filtered_data %>%
   ))
 
 ```
+
+```{r}
+# write.csv(filtered_data, "data_before_filtering.csv")
+```
+
 
 # FILTERING
 ```{r}

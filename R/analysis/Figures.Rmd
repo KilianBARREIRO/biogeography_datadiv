@@ -40,69 +40,111 @@ shp <- sf::st_read(here("./data/GEOGRAPHIE_DES_ATOLLS")) %>% #Not on Github for 
 
 # FIGURE 1 : Make the Sankey diagram
 ```{r}
-# A connection data frame is a list of flows with intensity for each flow
+library(networkD3)
+library(dplyr)
+
+# Données des liens avec chaque source liée à chaque cible, ajustées pour les valeurs de "Invalid taxonomy" et "True duplicates"
 links <- data.frame(
-  source=c( "Animal : 2.98e+05", "Animal : 2.98e+05", "After 1950 : 2.77e+05", "After 1950 : 2.77e+05", "Presence : 2.77e+05", "Presence : 2.77e+05", "Records : 2.76e+05", "Records : 2.76e+05", "Unique : 1.69e+05", "Unique : 1.69e+05", "Habitat : 1.56e+05", "Habitat : 1.56e+05", "Habitat : 1.56e+05"), 
-  
-  target=c( "After 1950 : 2.77e+05", "Before 1950 : 2.1e+04", "Presence : 2.77e+05", "Absence data : 2e+02", "Records : 2.76e+05", "Invalid recording method : 2e+02", "True duplicates : 1.07e+05", "Unique : 1.69e+05","Habitat : 1.56e+05", "No habitat : 1.29e+04", "Marine", "Terrestrial", "Others"), 
-  
-  value=c(0.277 , 0.02, 0.276,  0.001, 0.275, 0.001, 0.107, 0.169, 0.156, 0.013, 0.11, 0.01, 0.036)
-  )
- 
-# From these flows we need to create a node data frame: it lists every entities involved in the flow
-nodes <- data.frame(
-  name=c(as.character(links$source), 
-  as.character(links$target)) %>% unique()
+  source = c(
+  "GBIS/OBIS", "Additional", "Animal", "Animal", "After 1950", "After 1950", 
+  "Presence", "Presence", "Records", "Records", "Valid taxonomy", 
+  "Valid taxonomy", "Unique", "Unique", "Habitat", "Habitat", "Habitat"
+),
+target = c(
+  "Animal", "Animal", "After 1950", "Before 1950", "Presence", "Absence", 
+  "Records", "Invalid method", "Valid taxonomy", "Invalid taxonomy", 
+  "True duplicates", "Unique", "Habitat", "No habitat", 
+  "Marine", "Terrestrial", "Mixed"
+), 
+  value = c(0.298, 0.046, 0.324, 0.02, 0.323, 0.001, 0.322, 0.001, 0.264, 0.059,
+            0.078, 0.186, 0.185, 0.001, 0.141, 0.016, 0.029)
 )
- 
-# With networkD3, connection must be provided using id, not using real name like in the links dataframe.. So we need to reformat it.
-links$IDsource <- match(links$source, nodes$name)-1 
-links$IDtarget <- match(links$target, nodes$name)-1
-
-# Add a 'group' column to each connection:
-nodes$group <- as.factor(c("a", "b", "c","d", "e", "f", "g", "h", "i", "j", "k", "l","m","n"))
- 
-# Add a 'group' column to each node. Here I decide to put all of them in the same group to make them grey
-links$group <- as.factor(c("a1", "b1", "c1","d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1","m1"))
-
-# Give a color for each group:
-my_color <- 'd3.scaleOrdinal() .domain(["a", "b", "c","d", "e", "f", "g", "h", "i", "j", "k", "l","m","n","a1", "b1", "c1","d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1","m1"]) .range(["#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7",
-"#D4E6F1", "#F39C12", "#A9CCE3", "#F39C12", "#7FB3D5", "#F39C12", "#F39C12", "#5499C7", "#2980B9", "#F39C12", "#2471A3", "#2471A3", "#F39C12"
-])'
 
 
-# Appliquer les couleurs aux nœuds dans le graphique
-p <- networkD3::sankeyNetwork(Links = links, Nodes = nodes, 
-                              Source = "IDsource", Target = "IDtarget",
-                              Value = "value", NodeID = "name", 
-                   colourScale=my_color, LinkGroup="group", NodeGroup="group",
-                   fontSize = 15, fontFamily = 10, sinksRight = FALSE, 
-                   nodeWidth = 10, height = 150, width = 1100)
+
+# Création des nœuds (uniques)
+nodes <- data.frame(
+  name = unique(c(as.character(links$source), as.character(links$target)))
+)
+
+# Réassignation des ID des nœuds
+links$IDsource <- match(links$source, nodes$name) - 1
+links$IDtarget <- match(links$target, nodes$name) - 1
+
+# Assignation des groupes de nœuds (en fonction de leur type ou catégorie)
+nodes$group <- as.factor(c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r"))
+
+# Assignation des groupes de liens (en fonction de la relation entre les nœuds)
+links$group <- c("a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1", "m1", "n1", "o1", "p1", "q1")
+
+# Définition des couleurs des groupes pour les nœuds et les liens
+my_color <- 'd3.scaleOrdinal() 
+  .domain(["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1", "i1", "j1", "k1", "l1", "m1", "n1", "o1", "p1", "q1"]) 
+  .range(["#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#A093C7", 
+          "#A093C7", "#A093C7", "#A093C7", "#A093C7", "#D4E6F1", "#D4E6F1", "#A9CCE3", "#F39C12", "#7FB3D5", "#F39C12", 
+          "#5499C7", "#F39C12",  "#2980B9", "#F39C12","#F39C12", "#2471A3", "#1D5987", "#F39C12", "#1D5987","#1D5987", "#1D5987"])'
+
+# Création du graphique Sankey
+p <- sankeyNetwork(
+  Links = links, Nodes = nodes, 
+  Source = "IDsource", Target = "IDtarget", 
+  Value = "value", NodeID = "name", 
+  colourScale = my_color, LinkGroup = "group", NodeGroup = "group",
+  fontSize = 13, fontFamily = "Arial", sinksRight = FALSE,
+  nodeWidth = 10, height = 150, width = 1100
+)
+
+# Affichage du graphique
 p
 
+```
 
+
+```{r}
 # save the widget
 # library(htmlwidgets)
-htmlwidgets::saveWidget(p, file= "C:/Users/MG/Documents/GitHub/biogeography_datadiv/data/Other/sampbias/sankeyBasic1.html")
+htmlwidgets::saveWidget(p, file= here("outputs/figures/Figure_1.html")) 
 
 library(webshot)
-webshot("C:/Users/MG/Documents/GitHub/biogeography_datadiv/data/Other/sampbias/sankeyBasic1.html", "C:/Users/MG/Documents/GitHub/biogeography_datadiv/data/Other/sampbias/sankey.png", vwidth = 1100, vheight = 150, cliprect = "viewport")
-
+# webshot(here("outputs/Fig1.html"), 
+#         here("outputs/Fig1.jpeg"), 
+#         vwidth = 1100, 
+#         vheight = 150, 
+#         cliprect = "viewport", 
+#         zoom = 10)
+# 
+# webshot(here("outputs/Fig1.html"), 
+#         here("outputs/Fig1.png"), 
+#         vwidth = 1100, 
+#         vheight = 150, 
+#         cliprect = "viewport", 
+#         zoom = 3)
+webshot(
+  here("outputs/figures/Figure_1.html"),
+  here("outputs/figures/Figure_1.pdf"),
+  vwidth = 1100,
+  vheight = 600,   # Augmente si besoin pour éviter que le graphique soit coupé
+  cliprect = "viewport",
+  zoom = 0.5         # Pour améliorer la résolution
+)
 webshot("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankeyBasic1.html", "C:/Users/MG/Documents/GitHub/biogeography_datadiv/data/Other/sampbias/sankey_high_quality.pdf", vwidth = 1500, vheight = 200, cliprect = "viewport", zoom = 0.5)
 ```
 
 
 
-# FIGURE 2 : Over and under representation.
 
+
+# FIGURE 2 : Over and under representation.
 ```{r}
-plot_ideal_sampling <- function(data, Habitat, occurrence_threshold, n_tot, n_occ) {
+library(cowplot)
+
+plot_ideal_sampling <- function(data, Habitat, occurrence_threshold, n_tot, n_occ, show_legend = FALSE) {
   # Filtrer les données en fonction de l'habitat spécifié
   filtered_data <- data %>%
-    filter(Habitat == habitat,
-           !is.na(phylum)) 
+    filter(habitat == Habitat,
+           !is.na(class)) 
 
-  # Résumé des données en regroupant par archipel et niveau taxonomique
+  # Résumé des données
   summary_data <- filtered_data %>%
     mutate(
       nbocc = n(),
@@ -110,33 +152,153 @@ plot_ideal_sampling <- function(data, Habitat, occurrence_threshold, n_tot, n_oc
       .by = c("class")) %>%
     mutate(Difference = nbocc - idealsampling, .by ="class") %>%
     filter(!is.na(nbocc) & nbocc >= occurrence_threshold) %>%
-    mutate(bar_order = ifelse(Difference > 0, "Over-representation", "Under-representation"))
+    mutate(bar_order = ifelse(Difference > 0, "Over-representation", "Under-representation")) %>%
+    mutate(Difference_asinh = asinh(Difference))
   
   # Créer le graphique
-  ggplot(summary_data, aes(x = fct_reorder(phylum, Difference), y = asinh(Difference))) + 
-    geom_bar(stat = "identity", aes(fill = bar_order), position = "stack") +
-    scale_fill_manual(values = c("Over-representation" = "#1b9e77", "Under-representation" = "#d95f02"), name = "") +
+  p <- ggplot(summary_data, aes(x = fct_reorder(class, Difference), y = Difference_asinh)) +  
+    geom_bar(stat = "identity", aes(fill = bar_order), position = "dodge") +  
+    scale_fill_manual(values = c(
+      "Over-representation" = "#1b9e77", 
+      "Under-representation" = "#d95f02"), 
+      name = ""
+    ) +
     coord_flip() + 
-    labs(title = "",
-         x = "Class",  # Modifier le label de l'axe x
-         y = "Occurrences") +
+    labs(
+      x = NULL,
+      y = "Occurrences"
+    ) + 
+    scale_x_discrete(labels = function(x) {
+      # Afficher les valeurs réelles de Difference sur l'axe x
+      levels_x <- summary_data$Difference[summary_data$class %in% x]
+      return(sapply(levels_x, function(val) format(val, scientific = FALSE)))
+    }) +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) 
-  #+ facet_wrap(~Archipel)
+    theme(
+      axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 1),
+      axis.text.y = element_text(size = 8)
+    )
+  
+  if (!show_legend) {
+    p <- p + theme(legend.position = "none")
+  }
+  
+  return(p)
 }
 
-# Exemple d'utilisation de la fonction avec le niveau taxonomique "phylum"
-mar <- plot_ideal_sampling(working_dataset, Habitat = "Marine", occurrence_threshold = 100, n_tot = 5738, n_occ = 110890)
 
-ter <- plot_ideal_sampling(working_dataset, Habitat = "Terrestrial", occurrence_threshold = 10, n_tot = 980, n_occ = 9765)
+mar <- plot_ideal_sampling(filtered_data, Habitat = "Marine", occurrence_threshold = 100, n_tot = 5953, n_occ = 141181)
+ter <- plot_ideal_sampling(filtered_data, Habitat = "Terrestrial", occurrence_threshold = 10, n_tot = 1032, n_occ = 15940)
 
-# all <- plot_ideal_sampling(working_dataset, habitat = c("Terrestrial","Marine"), occurrence_threshold = 100, n_tot = 6675, n_occ = 120655)
+# >>> Recréer mar_legend avec légende <<<
 
-# plot_grid <- cowplot::plot_grid(mar, ter, ncol = 2, align = "hv")
+# On regénère UN graph identique mais sans enlever la légende
+mar_with_legend <- {
+  filtered_data %>%
+    filter(habitat == "Marine", !is.na(class)) %>%
+    mutate(
+      nbocc = n(),
+      idealsampling = 141181 * n_distinct(species) / 5953,
+      .by = c("class")) %>%
+    mutate(Difference = nbocc - idealsampling, .by ="class") %>%
+    filter(!is.na(nbocc) & nbocc >= 100) %>%
+    mutate(bar_order = ifelse(Difference > 0, "Over-representation", "Under-representation")) %>%
+    mutate(Difference_asinh = asinh(Difference)) %>%
+    ggplot(aes(x = fct_reorder(class, Difference), y = Difference_asinh)) +  
+    geom_bar(stat = "identity", aes(fill = bar_order), position = "dodge") +  
+    scale_fill_manual(values = c(
+      "Over-representation" = "#1b9e77", 
+      "Under-representation" = "#d95f02"), 
+      name = ""
+    ) +
+    coord_flip() + 
+    theme_minimal() +
+    theme(
+      legend.position = "top",
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+}
 
-ggsave("figure2_ter.jpeg", ter, width = 10, height = 6, dpi = 600)
-ggsave("figure2_mer.jpeg", mar, width = 10, height = 6, dpi = 600)
+legend <- get_legend(mar_with_legend)
+
+# >>> Maintenant assembler correctement <<<
+
+plot_grid <- plot_grid(
+  legend,
+  cowplot::plot_grid(mar, ter, ncol = 2, align = "hv"),
+  ncol = 1,
+  rel_heights = c(0.1, 1)  # Un peu plus petit que 0.1 si besoin
+)
+
+# Afficher
+plot_grid
+
+#ggsave(here("outputs/figures/Fig2.pdf"), plot_grid, width = 10, height = 6, dpi = 600)
+# ggsave("figure2_mer.jpeg", mar, width = 10, height = 6, dpi = 600)
 ```
+
+# Figure 2
+```{r}
+library(tidyverse)
+library(viridis)
+library(cowplot)
+
+# Création de deux palettes distinctes pour marine et terrestrial
+get_color_palette_split <- function(data) {
+    classes <- data %>% filter(!is.na(class)) %>% pull(class) %>% unique() %>% sort()
+    marine_classes <- data %>% filter(habitat == "Marine") %>% pull(class) %>% unique() %>% sort()
+    terrestrial_classes <- data %>% filter(habitat == "Terrestrial") %>% pull(class) %>% unique() %>% sort()
+    
+    marine_colors <- viridis(length(marine_classes), option = "D", end = 0.6)
+    terrestrial_colors <- viridis(length(terrestrial_classes), option = "C", begin = 0.4, end = 0.95)
+    
+    list(
+        marine = setNames(marine_colors, marine_classes),
+        terrestrial = setNames(terrestrial_colors, terrestrial_classes)
+    )
+}
+
+# Générer les palettes
+color_palettes <- get_color_palette_split(filtered_data)
+
+# Fonction pour tracer le top N espèces d’un habitat
+plot_top_species <- function(data, Habitat, n_top = 10, palette) {
+    top_species <- data %>%
+        filter(Habitat == habitat, !is.na(species), !is.na(class)) %>%
+        count(species, class, sort = TRUE) %>%
+        slice_max(n, n = n_top)
+    
+    ggplot(top_species, aes(x = reorder(species, n), y = n, fill = class)) +
+        geom_bar(stat = "identity", width = 0.8) +
+        coord_flip() +
+        scale_fill_manual(values = palette) +
+        labs(x = "Species", y = "Number of Records") +
+        theme_minimal() +
+        theme(
+            plot.title = element_blank(),
+            axis.text.y = element_text(size = 10, angle = 30),
+            axis.text.x = element_text(size = 8, hjust = 1),
+            legend.title = element_blank(),
+            axis.title.y = element_blank()
+        )
+}
+
+# Créer les deux graphes avec les palettes séparées
+plot_marine <- plot_top_species(filtered_data, "Marine", palette = color_palettes$marine)
+plot_terrestrial <- plot_top_species(filtered_data, "Terrestrial", palette = color_palettes$terrestrial)
+
+# Combinaison finale
+plot_final <- plot_grid(plot_marine, plot_terrestrial, ncol = 2, align = "h")
+
+plot_final
+
+# ggsave(here("outputs/figures/Fig2B.pdf"), plot_final, width = 10, height = 4, dpi = 600)
+```
+
+
 
 # Figure 3
 ```{r}
@@ -151,32 +313,38 @@ fig3_panelA <- function(dataset, Habitat, deg, shp_data) {
     filter(habitat == Habitat) %>% 
     sf::st_as_sf(coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
   
-  grid <- shp %>% 
+  grid <- shp_data %>% 
     sf::st_make_grid(cellsize = c(deg, deg)) %>%
     sf::st_as_sf() %>% 
-    mutate(grid_id = 1:n())%>%
+    mutate(grid_id = 1:n()) %>%
     sf::st_join(dataset) %>%
     group_by(grid_id) %>%
     summarize(n_occ = n(),
-              n_species = n_distinct(ScientificName))
-
+              n_species = n_distinct(species))
+  
   gg <- ggplot() +
-    geom_sf(data = grid, aes(fill = log(n_species +1)), color = NA) +
-    scale_fill_gradientn(colours = pal, limits = c(0,10)) +
-    geom_sf(data = shp, alpha = 0.01, color = "white") +
-    labs(title = "",
-      x = "Longitude",
-      y = "Latitude") +
+    geom_sf(data = grid, aes(fill = log(n_occ + 1)), color = NA) +
+    scale_fill_gradientn(colours = pal, limits = c(0, 10)) +
+    # Soit tu enlèves la couche suivante
+    # geom_sf(data = shp_data, alpha = 0.01, color = "white") 
+    # Soit tu la corriges :
+    geom_sf(data = shp_data, fill = NA, color = "white", size = 0.1) +
+    labs(title = "", x = "Longitude", y = "Latitude") +
     theme_bw() +
-    theme(axis.text.x = element_text(color = "black", size = 12),  
-        axis.text.y = element_text(color = "black", size = 12),
-        axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15))
+    theme(
+      axis.text.x = element_text(color = "black", size = 12),
+      axis.text.y = element_text(color = "black", size = 12),
+      axis.title.x = element_text(size = 15),
+      axis.title.y = element_text(size = 15),
+      legend.title = element_blank()
+    )
   
   return(gg)
-  }
+}
+
 
 ## PANEL B : Violin distribution 
-fig3_panelB <- function(dataset, Habitat) {
+fig4 <- function(dataset, Habitat) {
   
   dataset <- dataset %>%
     filter(habitat == Habitat) %>%
@@ -185,21 +353,26 @@ fig3_panelB <- function(dataset, Habitat) {
               n_species = n_distinct(species))
     
     
-  gg <- ggplot(data = dataset, aes(x = log10(n_species+1), y = archipelago, colour = archipelago)) +
+  gg <- ggplot(data = dataset, aes(x = log10(n_occ+1), y = archipelago, colour = archipelago)) +
     geom_point(show.legend = FALSE) +
     geom_violin(aes(fill = archipelago), alpha = 0.3, show.legend = FALSE) +
     labs(title = "",
-         x = "Species (log)",
+         x = "Number of records (log)",
          y = "Archipelagos") +
     scale_color_manual(values = colors, labels = labels) +
     scale_fill_manual(values = colors, labels = labels) +
     scale_y_discrete(labels = labels) +
-    ggrepel::geom_text_repel(aes(label = island), size = 3, color = "black") +
+    scale_x_continuous(
+  breaks = log10(c(1, 10, 100, 1000, 10000)),
+  labels = c("1", "10", "100", "1000", "10000"),
+  limits = c(0, 5)
+) +
+    ggrepel::geom_text_repel(aes(label = island), size = 3, color = "black",
+                             max.overlaps = 50) +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, color = "black", size = 12),  
         axis.text.y = element_text(angle = 45, hjust = 1, color = "black", size = 12),
-        axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15)) + 
-    xlim(0,5)
+        axis.title.x = element_text(size = 15), axis.title.y = element_text(size = 15)) 
   
   return(gg)
   }
@@ -209,21 +382,47 @@ fig3_panelB <- function(dataset, Habitat) {
 # Figure 3 : FULL (Might take a little bit of time ~5min with n_grid = 50)
 ```{r}
 a <- fig3_panelA(filtered_data, "Marine", 0.5, shp)
-b <- fig3_panelA(filtered_data, "Terrestrial", 0.5, shp) + theme(axis.title.y = element_blank(), axis.text.y = element_blank())
+b <- fig3_panelA(filtered_data, "Terrestrial", 0.5, shp) 
 
-occurrences_mar <- fig3_panelB(filtered_data, "Marine")
-occurrences_terr <- fig3_panelB(filtered_data, "Terrestrial") + 
-  theme(axis.title.y = element_blank(), axis.text.y = element_blank())
+ggsave(here("outputs/figures/Fig3A_Marine.pdf"), a, width = 5, height = 5, dpi = 600)
+ggsave(here("outputs/figures/Fig3B_Terrestrial.pdf"), b, width = 5, height = 5, dpi = 600)
 
-combined_plot <- cowplot::plot_grid(a, b, occurrences_mar, occurrences_terr, labels = c("Marine", "Terrestrial"), ncol = 2, nrow = 2) +
-  theme(legend.position = 'top') 
+combined_plot <- cowplot::plot_grid(a, b, labels = c("A", "B"), nrow = 2) 
+ggsave(here("outputs/figures/Fig3_merged.pdf"), combined_plot, width = 5, height = 10, dpi = 600)
+```
 
-ggsave("combined_plot.png", combined_plot, width = 8, height = 10, units = "cm", dpi = 600)
+# Figure 4 :
+```{r}
+occurrences_mar <- fig4(filtered_data, "Marine")
+occurrences_terr <- fig4(filtered_data, "Terrestrial") 
+
+ggsave(here("outputs/figures/Fig4_Marine.pdf"), occurrences_mar, width = 10, height = 5, dpi = 600)
+ggsave(here("outputs/figures/Fig4_Terrestrial.pdf"), occurrences_terr, width = 10, height = 5, dpi = 600)
+
+combined_plot <- cowplot::plot_grid(occurrences_mar, occurrences_terr, labels = c("A", "B"), nrow = 2)
+
+ggsave(here("outputs/figures/Fig4_merged.pdf"), combined_plot, width = 10, height = 10, dpi = 600)
 
 ```
 
+# Figure S1
+```{r}
+library(magick)
 
-# Figure 4 (You can change this code, I've put mine to generate rarefaction curves based on occurrences,but I guess Laura will modify it)
+# Charger l'image JPEG
+img <- image_read(here("outputs/figures/FigS1_updated.jpeg"))
+img2 <- image_read(here("outputs/figures/FigS1_updated_bis.jpeg"))
+# Sauvegarder en PDF
+image_write(img, path = here("outputs/figures/Figure_S1.pdf"), format = "pdf")
+image_write(img2, path = here("outputs/figures/Figure_S1_bis.pdf"), format = "pdf")
+```
+
+
+
+
+# Sandbox
+
+# Figure 5 (You can change this code, I've put mine to generate rarefaction curves based on occurrences,but I guess Laura will modify it)
 ```{r}
 generate_rarefaction_curve <- function(dataset, threshold_percentage, habitat) {
 
