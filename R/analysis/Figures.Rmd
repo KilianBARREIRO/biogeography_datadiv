@@ -46,7 +46,7 @@ library(dplyr)
 # Données des liens avec chaque source liée à chaque cible, ajustées pour les valeurs de "Invalid taxonomy" et "True duplicates"
 links <- data.frame(
   source = c(
-  "GBIS/OBIS", "Additional", "Animal", "Animal", "After 1950", "After 1950", 
+  "GBIF/OBIS", "Additional", "Animal", "Animal", "After 1950", "After 1950", 
   "Presence", "Presence", "Records", "Records", "Valid taxonomy", 
   "Valid taxonomy", "Unique", "Unique", "Habitat", "Habitat", "Habitat"
 ),
@@ -90,7 +90,7 @@ p <- sankeyNetwork(
   Source = "IDsource", Target = "IDtarget", 
   Value = "value", NodeID = "name", 
   colourScale = my_color, LinkGroup = "group", NodeGroup = "group",
-  fontSize = 13, fontFamily = "Arial", sinksRight = FALSE,
+  fontSize = 15, fontFamily = "Arial", sinksRight = FALSE,
   nodeWidth = 10, height = 150, width = 1100
 )
 
@@ -103,7 +103,7 @@ p
 ```{r}
 # save the widget
 # library(htmlwidgets)
-htmlwidgets::saveWidget(p, file= here("outputs/figures/Figure_1.html")) 
+htmlwidgets::saveWidget(p, file= here("outputs/Figure_1.html")) 
 
 library(webshot)
 # webshot(here("outputs/Fig1.html"), 
@@ -120,14 +120,14 @@ library(webshot)
 #         cliprect = "viewport", 
 #         zoom = 3)
 webshot(
-  here("outputs/figures/Figure_1.html"),
-  here("outputs/figures/Figure_1.pdf"),
+  here("outputs/Figure_1.html"),
+  here("outputs/Figure_1.pdf"),
   vwidth = 1100,
   vheight = 600,   # Augmente si besoin pour éviter que le graphique soit coupé
   cliprect = "viewport",
   zoom = 0.5         # Pour améliorer la résolution
 )
-webshot("C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/sankeyBasic1.html", "C:/Users/MG/Documents/GitHub/biogeography_datadiv/data/Other/sampbias/sankey_high_quality.pdf", vwidth = 1500, vheight = 200, cliprect = "viewport", zoom = 0.5)
+webshot("C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/Figure_1.html", "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/sankey_high_quality.pdf", vwidth = 1100, vheight = 200, cliprect = "viewport", zoom = 0.5)
 ```
 
 
@@ -168,11 +168,7 @@ plot_ideal_sampling <- function(data, Habitat, occurrence_threshold, n_tot, n_oc
       x = NULL,
       y = "Occurrences"
     ) + 
-    scale_x_discrete(labels = function(x) {
-      # Afficher les valeurs réelles de Difference sur l'axe x
-      levels_x <- summary_data$Difference[summary_data$class %in% x]
-      return(sapply(levels_x, function(val) format(val, scientific = FALSE)))
-    }) +
+    scale_x_discrete() +
     theme_minimal() +
     theme(
       axis.text.x = element_text(angle = 0, vjust = 0.5, hjust = 1),
@@ -296,6 +292,29 @@ plot_final <- plot_grid(plot_marine, plot_terrestrial, ncol = 2, align = "h")
 plot_final
 
 # ggsave(here("outputs/figures/Fig2B.pdf"), plot_final, width = 10, height = 4, dpi = 600)
+```
+
+Figure 2 annotations
+```{r}
+library(pdftools)
+library(magick)
+
+# Convertir la première page en image (PNG)
+pdf_file <- "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/Figure_2_1stReview_Updated.pdf"
+img <- image_read_pdf(pdf_file, density = 600)[1:2]  # [1] pour la première page
+
+
+img_1_annotated <- image_annotate(img[1], "A", size = 25, gravity = "northwest", color = "black", location = "+80+60")
+img_2_annotated <- image_annotate(img[2], "B", size = 25, gravity = "northwest", color = "black", location = "+70+45")
+
+image_write(img_annotated, "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/Figure_2A_1stReview_Updated_annotated.png")
+image_write(img_annotated, "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/Figure_2A_1stReview_Updated_annotated.pdf", format = "pdf")
+
+combined <- image_append(c(img_1_annotated, img_2_annotated), stack = TRUE)
+
+image_write(combined, "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/Figure_2.png")
+image_write(combined, "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/Figure_2.pdf", format = "pdf")
+
 ```
 
 

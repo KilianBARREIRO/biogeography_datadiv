@@ -198,15 +198,15 @@ image3 <- image_resize(image3, paste0(image3_width * resize_factor3, "x", height
 image4 <- image_resize(image4, paste0(image4_width * resize_factor4, "x", height))
 
 # Combiner les images par lignes
-row1 <- image_append(c(image1, image3)) %>% image_annotate("(a)", size = 350, color = "black", location = "+50+50") 
-row2 <- image_append(c(image2, image4)) %>% image_annotate("(b)", size = 350, color = "black", location = "+50+0")
+row1 <- image_append(c(image1, image3)) %>% image_annotate("A", size = 350, color = "black", location = "+50+50") 
+row2 <- image_append(c(image2, image4)) %>% image_annotate("B", size = 350, color = "black", location = "+50+0")
 
 # Combiner les lignes en un carré 2x2
 combined_image <- image_append(c(row1, row2), stack = TRUE)
 
-image_write(combined_image, here("outputs/sampbias/figure6_merged.pdf"),format = "pdf", density = 300, quality = 100)
+image_write(combined_image, here("outputs/sampbias/figure6_merged.pdf"),format = "pdf", density = 600, quality = 100)
 
-# image_write(combined_image, "C:/Users/MG/Documents/GitHub/biogeography_datadiv/Data/Other/sampbias/figure6.jpeg", quality = 100)
+image_write(combined_image, "C:/Users/Kilia/Documents/GitHub/biogeography_datadiv/outputs/figures/figure6.jpeg", quality = 100)
 ```
 
 
